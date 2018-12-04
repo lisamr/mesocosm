@@ -2,6 +2,21 @@
 #Run in this order: 
 #1. format.comp(), 2. HPraster(),  3. simulate(h=format.comp, HP = HPraster, fun = f), 4. f(), 5. animate(HP = HPraster, v = simulate)
 
+#libraries and display
+library(raster)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(RColorBrewer)
+#display.brewer.all()
+pal <-rev(brewer.pal(6, "YlOrRd"))  
+
+#data management functions
+extract_after <-  function(char, vector){
+    pattern <- paste0(".*", char)
+    sub(pattern, '', vector)#after chacter
+  }
+
 ############################################################
 #1. format.comp()
 ############################################################
