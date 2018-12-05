@@ -30,11 +30,17 @@ getabund <- function(r, n=100, mu=1){
   return(pop)
 }
 
-x=c(1,2,4,6)
-counts <- lapply(x, function(r) getabund(r, n=100, mu=1.2))
-counts2 <- unlist(counts)
-counts2 <- as.data.frame(matrix(counts2, ncol=length(x))) 
-names(counts2) <- c("R1", "R2", "R3", "R4")
+getabund2 <- function(n=100, mu=1){
+  x=c(1,2,4,6)
+  counts <- lapply(x, function(r) getabund(r, n, mu))
+  counts2 <- unlist(counts)
+  counts2 <- as.data.frame(matrix(counts2, ncol=length(x))) 
+  names(counts2) <- c("R1", "R2", "R3", "R4")
+  counts2
+}
+
+counts2 <- getabund2(100, 1)
+
 melt(counts2)
 
 #plot counts

@@ -73,7 +73,7 @@ exposure$exp.i[which(S)] <- 0
 exposure$exp.i[which(I)] <- 0
 exposure$exp.f[which(S)] <- 0
 exposure$exp.f[which(I)] <- 0
-exposure$exp.f[which(E)] <- 20
+exposure$exp.f[which(E)] <- ncol(dat)
 
 for(i in 1:nrow(dat)){
   #change these values to NA, corresponding to time exposed

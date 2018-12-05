@@ -1,6 +1,14 @@
 #Functions for mesocosm simulation
 #Run in this order: 
+
+#STARTING DISTRIBUTIONS
+#1. species abundances: getabund2(n=100, mu=1) (need to run getabund())
+
+#SIMULATION
 #1. format.comp(), 2. HPraster(),  3. simulate(h=format.comp, HP = HPraster, fun = f), 4. f(), 5. animate(HP = HPraster, v = simulate)
+
+#RESPONSE VARIABLES
+#1. R1. response(sim, HP), 2. response.sum = (response)
 
 #libraries and display
 library(raster)
@@ -53,7 +61,7 @@ HPraster <- function(h, n=10, ncol=10, nrow=10){
   host <- path <- raster(ncol=ncol, nrow=nrow, crs="+proj=utm +zone=1 +datum=WGS84", xmn=0, xmx=10, ymn=0, ymx=10) #create a raster layer for the host and pathogen
   
   #host
-  values(host) <- h1[[2]][,1] # species identity, already randomized
+  values(host) <- h[[2]][,1] # species identity, already randomized
   
   #inoculate with pathogen
   values(path) <- 0
@@ -66,7 +74,7 @@ HPraster <- function(h, n=10, ncol=10, nrow=10){
 #3. simulate()
 ############################################################
 #simulation
-simulate <- function(h, HP, steps, fun) {
+simulate <- function(h, HP, steps, fun=f) {
   #setting up the raster grid
   h <- h[[1]]  
   path <- HP$path
