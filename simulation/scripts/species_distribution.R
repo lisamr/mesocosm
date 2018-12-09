@@ -15,31 +15,49 @@ ggplot <- function(...) ggplot2::ggplot(...) + scale_fill_manual(values=pal) + s
 #important for knowing abundances of species at each richness level.
 
 #you have 6 species. get proportion of individuals per species and standardize to a certain number of total individuals.
-getabund <- function(r, n=100, mu=1){ 
-  #r=richness, n=total individuals, mu=mean of log distribution
+
+
+#adding in argument "rand" so I can specify if assembly is random
+getabund3 <- function(n=100, mu=1, rand=F) {
   
-#get counts of each species
-  n1 = n+max(r) #buffering the number of species so there aren't errors due to rounding
-  pool=dlnorm(1:6, mu) #distribution of each species
-  abund <- pool[1:r]*n1/sum(pool[1:r]) #get abundances of each species for a richness level
-
-#get actual population from the counts above 
-  r2=1:length(r)
-  pop <- rep(1:length(abund), abund)
-  pop <- sort(sample(pop, n)) #bring the population back down to desired n. had issues with rounding.
-  return(pop)
+  #load nested functions
+  getabund <- function(r, n, mu){ 
+    #r=richness, n=total individuals, mu=mean of log distribution
+    
+    #get counts of each species
+    n1 = n+max(r) #buffering the number of species so there aren't errors due to rounding
+    pool=dlnorm(1:6, mu) #distribution of each species
+    abund <- pool[1:r]*n1/sum(pool[1:r]) #get abundances of each species for a richness level
+    
+    #get actual population from the counts above 
+    r2=1:length(r)
+    pop <- rep(1:length(abund), abund)
+    pop <- sort(sample(pop, n)) #bring the population back down to desired n. had issues with rounding.
+    return(pop)
+  }
+  getabund2 <- function(n, mu){
+    x=c(1,2,4,6)
+    counts <- lapply(x, function(r) getabund(r, n, mu))
+    counts2 <- unlist(counts)
+    counts2 <- as.data.frame(matrix(counts2, ncol=length(x))) 
+    names(counts2) <- c("R1", "R2", "R4", "R6")
+    counts2
+  }
+  
+  #setup randomization option
+  A <- getabund2(n, mu)
+  sp <- unique(A$R6)
+  if (rand==T) {
+    randsp <- sample(sp, length(sp))
+    A <- apply(A, 2, function(x) Rename(randsp, sp, x))
+  }
+    A
 }
 
-getabund2 <- function(n=100, mu=1){
-  x=c(1,2,4,6)
-  counts <- lapply(x, function(r) getabund(r, n, mu))
-  counts2 <- unlist(counts)
-  counts2 <- as.data.frame(matrix(counts2, ncol=length(x))) 
-  names(counts2) <- c("R1", "R2", "R3", "R4")
-  counts2
-}
+getabund3(200, 1, rand = T)  
 
-counts2 <- getabund2(100, 1)
+
+
 
 melt(counts2)
 
@@ -53,7 +71,7 @@ ggplot(counts3, aes( variable, group=spp, fill=spp)) +
 tmp <- counts3 %>% 
   group_by(variable) %>% 
   count(value) %>% 
-  filter(variable=="R4")
+  filter(variable=="R6")
 plot(tmp$value, tmp$n)
 hist(counts2$R4)
 
