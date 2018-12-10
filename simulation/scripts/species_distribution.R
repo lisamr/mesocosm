@@ -26,7 +26,7 @@ getabund3 <- function(n=100, mu=1, rand=F) {
     
     #get counts of each species
     n1 = n+max(r) #buffering the number of species so there aren't errors due to rounding
-    pool=dlnorm(1:6, mu) #distribution of each species
+    pool=dlnorm(1:r, mu) #distribution of each species
     abund <- pool[1:r]*n1/sum(pool[1:r]) #get abundances of each species for a richness level
     
     #get actual population from the counts above 
@@ -54,10 +54,130 @@ getabund3 <- function(n=100, mu=1, rand=F) {
     A
 }
 
-getabund3(200, 1, rand = T)  
+counts2 <- getabund3(200, 1, rand = T)  
 
+#################################
+#Abundances with additive treatment
+#################################
+#trays are 10 (25) x 20 (50) inches, optimumum distance is 2 cm apart...12x25=300plants
+#design abundances so abund vs. richness increases linearly. Unfortunately, number of species n doesn't remain the same throughout treatments. may need to be a saturating curve. 
+design <- tibble(r=c(1.8, 2, 2.4, 2.8), w=round(25/r), l=round(50/r), n=w*l, sp=c( 6, 4, 2, 1))
+plot(design$sp, design$n, ylim=c(0, max(design$n)))
+abline(lm(design$n~design$sp))
 
+test <- sapply(c(1,2,4,6), function(i) {
+  A <- getabund(i, design$n[design$sp==i], 1)
+  R <- rep(i, length(A))
+  cbind(R, A)
+}
+  )
+test <- do.call("rbind.data.frame", test)
+ggplot(test, aes(A, group=R))+
+  geom_bar()+
+  facet_grid(~R)
 
+#Saturating curve. define the curves based on the species abundances of the richest community. I'm using 392, a somewhat arbitrary number that seems fine for the most abundant community. don't want to plant too much more than that. 
+A <- getabund(6, 392, 1) %>% table()
+R <- c(1,2,4,6)
+N <- sapply(R, function(i) sum(A[1:i]))
+tmp <- sapply(1:length(N), function(i) {
+  A <- getabund(R[i], N[i], mu = 1)
+  R <- rep(i, length(A))
+  cbind(R, A)
+  })
+tmp <- do.call("rbind.data.frame", tmp)
+ggplot(tmp, aes(R, group=A, fill=A))+
+  geom_bar()
+
+#redesigning. Probably the best I'll do.
+N # 122 220 333 392 = optimum number to keep constant species abundaces across treatments
+design <- tibble(r=c(1.75, 1.9, 2.28, 3), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1))
+tmp <- sapply(c(1,2,4,6), function(i) {
+  A <- getabund(i, design$n[design$sp==i], 1)
+  R <- rep(i, length(A))
+  cbind(R, A)
+}
+)
+tmp <- do.call("rbind.data.frame", tmp)
+tmp$R <- as.factor(tmp$R)
+tmp$A <- as.factor(tmp$A)
+tmp$A <- factor(tmp$A, levels = rev(levels(tmp$A)))
+ggplot(tmp, aes(R, group=A, fill=A))+
+  geom_bar()
+
+#getting abundances for all 4 treatments: sub/det, sub/rand, add/det, add/rand
+getabund4 <- function(dist, rand=F, mu=1){
+  #load function
+  getabund <- function(r, n, mu){ 
+    #r=richness, n=total individuals, mu=mean of log distribution
+    
+    #get counts of each species
+    n1 = n+max(r) #buffering the number of species so there aren't errors due to rounding
+    pool=dlnorm(1:r, mu) #distribution of each species
+    abund <- pool[1:r]*n1/sum(pool[1:r]) #get abundances of each species for a richness level
+    
+    #get actual population from the counts above 
+    r2=1:length(r)
+    pop <- rep(1:length(abund), abund)
+    pop <- sort(sample(pop, n)) #bring the population back down to desired n. had issues with rounding.
+    return(pop)
+  }
+  
+  #design is based on dimensions of available propogation trays
+  design <- tibble(r=dist, w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 1,2,4,6))
+  tmp <- lapply(c(1,2,4,6), function(i) {
+    A <- getabund(i, design$n[design$sp==i], mu)
+    R <- rep(i, length(A))
+    cbind(R, A)
+  }
+  )
+  tmp <- do.call("rbind.data.frame", tmp)
+
+  #setup randomization option
+  sp <- unique(tmp$A)
+  if (rand==T) {
+    randsp <- sample(sp, length(sp))
+    tmp$A <- Rename(randsp, sp, tmp$A)
+  }
+  tmp$R <- as.factor(as.numeric(tmp$R))
+  tmp$A <- as.factor(as.numeric(tmp$A))
+  tmp$A <- factor(tmp$A, levels = rev(levels(tmp$A)))
+  tmp
+}
+
+#treatments: sub/det, sub/rand, add/det, add/rand
+#interplant spacings (cm)
+#default distances
+D.add <- rev(c(1.75, 1.9, 2.28, 3))
+D.sub <- 2
+
+A_D <- getabund4(D.add, F, 1)
+A_R <- getabund4(D.add, T, 1)
+S_D <- getabund4(D.sub, F, 1)
+S_R <- getabund4(D.sub, T, 1)
+
+p1 <- ggplot(A_D, aes(R, group=A, fill=A))+
+  geom_bar()+
+  labs(title="add, deterministic")
+p2 <- ggplot(A_R, aes(R, group=A, fill=A))+
+  geom_bar()+
+  labs(title="add, random")
+p3 <- ggplot(S_D, aes(R, group=A, fill=A))+
+  geom_bar()+
+  labs(title="sub, deterministic")
+p4 <- ggplot(S_R, aes(R, group=A, fill=A))+
+  geom_bar()+
+  labs(title="sub, random")
+multiplot(p1, p2, p3, p4, cols=2)
+
+#exporting the dimensions of the experiment to csv
+design <- tibble(d=rep(c("add","sub"), each=4), r=c(1.75, 1.9, 2.28, 3, 2, 2, 2, 2), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1, 6, 4, 2, 1))
+design <- design %>% 
+  group_by(d) %>% 
+  arrange(sp, .by_group=T)
+write.csv(design, "simulation/outputs/design.csv", row.names = F)
+################################
+#plotting
 
 melt(counts2)
 
@@ -65,18 +185,22 @@ melt(counts2)
 counts3 <- melt(counts2)
 spp <- as.factor(counts3$value)
 spp <- factor(spp, levels = sort(levels(spp), T))
-ggplot(counts3, aes( variable, group=spp, fill=spp)) +
+ggplot(counts3, aes( Var2, group=spp, fill=spp)) +
   geom_bar()
 #plot distribution of richest community
 tmp <- counts3 %>% 
-  group_by(variable) %>% 
+  group_by(Var2) %>% 
   count(value) %>% 
-  filter(variable=="R6")
+  filter(Var2=="R6")
 plot(tmp$value, tmp$n)
 hist(counts2$R4)
 
 #export host abundances 
 write.csv(counts2, "simulation/outputs/hostabund.csv", row.names = F)
+
+
+
+
 
 ##################################
 #COMPETENCY CURVES

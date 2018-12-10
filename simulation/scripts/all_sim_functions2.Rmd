@@ -1,0 +1,266 @@
+---
+title: "all_sim_functions2"
+author: "Lisa Rosenthal"
+date: "12/9/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#libraries
+```{r}
+library(raster)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+```
+
+
+#Data managment
+```{r}
+Rename <-  
+  function(values_to, index_from, from_column){
+  result <- (values_to[match(from_column, index_from)])
+  return(result)
+  }
+
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+```
+
+#species abundances
+```{r}
+#getting abundances for all 4 treatments: sub/det, sub/rand, add/det, add/rand
+#default planting distances (cm)
+D.add <- rev(c(1.75, 1.9, 2.28, 3))
+D.sub <- 2
+getabund4 <- function(dist, rand=F, mu=1){
+  #load function
+  getabund <- function(r, n, mu){ 
+    #r=richness, n=total individuals, mu=mean of log distribution
+    
+    #get counts of each species
+    n1 = n+max(r) #buffering the number of species so there aren't errors due to rounding
+    pool=dlnorm(1:r, mu) #distribution of each species
+    abund <- pool[1:r]*n1/sum(pool[1:r]) #get abundances of each species for a richness level
+    
+    #get actual population from the counts above 
+    r2=1:length(r)
+    pop <- rep(1:length(abund), abund)
+    pop <- sort(sample(pop, n)) #bring the population back down to desired n. had issues with rounding.
+    return(pop)
+  }
+  
+  #design is based on dimensions of available propogation trays
+  design <- tibble(r=dist, w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 1,2,4,6))
+  tmp <- lapply(c(1,2,4,6), function(i) {
+    A <- getabund(i, design$n[design$sp==i], mu)
+    R <- rep(i, length(A))
+    cbind(R, A)
+  }
+  )
+  tmp <- do.call("rbind.data.frame", tmp)
+
+  #setup randomization option
+  sp <- unique(tmp$A)
+  if (rand==T) {
+    randsp <- sample(sp, length(sp))
+    tmp$A <- Rename(randsp, sp, tmp$A)
+  }
+  tmp$R <- as.factor(as.numeric(tmp$R))
+  tmp$A <- as.factor(as.numeric(tmp$A))
+  tmp$A <- factor(tmp$A, levels = rev(levels(tmp$A)))
+  tmp
+}
+
+```
+
+#simulation
+```{r}
+#make function to get host values and matrix of infection probabilities
+format.comp2 <- function(rich, beta, distances, plants=abund$R2, steps=20){
+  plants=plants %>% as.character() %>% as.numeric()
+  distances = (distances*10) #convert them into mm from cm and reverse order so first one is for R1
+  #plants=vector of plant identies
+  #steps=total time of simulation
+  #beta=dataframe of competency values over time. eg. comp2. column values are time, species, comp. length(time)=steps.
+  
+  #assign values to host
+  s <- matrix(rep(plants, steps), ncol=steps) #species matrix across time
+  s <- s[sample(nrow(s)),] #randomize cells
+  
+  #get matrix of beta values for each time step after exposure
+  betaP <- beta %>% 
+    filter(trans=="prim") %>% 
+    filter(dist==2)
+  betaS <- beta %>% 
+    filter(dist==distances[rich]) %>% 
+    filter(trans=="sec") 
+ 
+  valP <- lapply(1:steps, function(x) Rename(betaP[betaP$time==x,]$beta, betaP[betaP$time==x,]$species, from_column = s[,x]))
+  h.P <- matrix(unlist(valP), ncol = length(valP), byrow = F)
+  valS <- lapply(1:steps, function(x) Rename(betaS[betaS$time==x,]$beta, betaS[betaS$time==x,]$species, from_column = s[,x]))
+  h.S <- matrix(unlist(valS), ncol = length(valS), byrow = F)
+  
+  return(list("betaP"=h.P,"betaS"=h.S, "species_ident"=s))
+}
+
+#set up pathogen and host raster grids
+HPraster2 <- function(design, density, rich, h, n=10){
+  #design=design
+  #density="add"
+  #rich=C
+  #h=test
+  #n=10
+  
+  design <- design %>% filter(d==density) %>% slice(rich)
+  n=round(n*.01*design$n)
+  ncol <- design$l
+  nrow <- design$w
+  #design=data frame with the number of plants in each treatment
+  #density="add" or "sub"
+  #rich=richness level (1-4)
+  #h=output from format.comp()
+  #n=number of inoculated plants
+
+  
+  host <- path <- raster(ncol=ncol, nrow=nrow, crs="+proj=utm +zone=1 +datum=WGS84", xmn=0, xmx=ncol, ymn=0, ymx=nrow) #create a raster layer for the host and pathogen
+  
+  #host
+  values(host) <- h$species_ident[,1] # species identity, already randomized
+  
+  #inoculate with pathogen
+  values(path) <- 0
+  values(path) <- sample(c(rep(1, n), rep(0, ncell(path)-n)), replace = F)
+
+  return(list("path"=path, "host"=host))
+}
+
+#simulation
+simulate2 <- function(h, HP, steps) {
+  #h=test
+  #HP=HP
+  #steps=20
+  #fun=f
+  #time=1
+  #i=88
+  
+  #setting up the raster grid
+  path <- HP$path
+  host <- HP$host
+  v <- matrix(0, ncell(path), steps)
+  v[,1] <- values(path) #values of infection status
+  a <- adjacent(host, 1:ncell(host), 4, sorted=TRUE)
+
+  #setting up objects that will be reported
+  betaP <- h$betaP
+  betaS <- h$betaS
+  PK4 <- PK3 <- PK2 <- PK1 <- matrix(rep(betaS[,1], steps), ncol = steps) #"beta" at the current time for each neighbor. change after exposure
+  t.exposed <- matrix(NA, nrow=ncell(host), ncol=4) 
+  
+  for (time in 1:(steps-1)) { #for every time interval
+    v[,time+1] <- v[,time] #previous status continues to next time step
+    
+    #chunk for getting time since exposure for each cell-neighbor combo
+    for (i in 1:nrow(v)) { #for every cell i
+      if (v[i, time+1] == 1 ) next #skipping those already infected
+      adj <- a[a[,1] == i, 2]	#find all your neighbors
+      if (any(v[adj, time] > 0)) { #if any of the neighbors are infected
+        adjI <- which((v[adj, time]==1)) #identify which ones
+        for (k in 1:length(adjI)){ #for each of the infected neighbors
+          if (!is.na(t.exposed[i, adjI[k] ])) next#skipping the neighbors that have already been recorded
+          t.exposed[i, adjI[k]] <- (time) #record first time exposed for that neighbor
+        }
+        #if (!is.na(t.exposed[i,k])) next 
+        #t.exposed[i,k] <- (time) #record first time exposed for that neighbor
+      }
+    }
+    
+    #chunk for turning susceptibles into infected
+    for (i in 1:nrow(v)) { #for every cell
+      if (v[i, time+1] == 1 ) next #skipping those already infected
+      adj <- a[a[,1] == i, 2]	#find all your neighbors
+      if (any(v[adj, time] > 0)) { #if any neighbors are infected
+        #update probability of infection as a function of time after exposure from each neighbor (k1, k2, k3, k4)
+        PK1[i, time] <- betaS[i, time-t.exposed[i, 1]+1] 
+        PK2[i, time] <- betaS[i, time-t.exposed[i, 2]+1] 
+        PK3[i, time] <- betaS[i, time-t.exposed[i, 3]+1] 
+        PK4[i, time] <- betaS[i, time-t.exposed[i, 4]+1] 
+
+        #function for defining susceptible becoming infected  
+        f <- function(p, h) {
+          if(is.na(h)) { #give NA values 0
+            0
+          } else{
+            if ( runif(1, 0.1, 1) <= h) {#youre infected if value is less than or equal your probability of getting infected (competency value). h=1 always infected. h=0 never infected.
+              1
+            } else {
+              p #if not infected, remain the same as last time step, p
+            }
+          }
+        }
+        
+        #become infected at some function of current health status and host competency. value of 1 in P leads to infection.
+        PK <- list(PK1, PK2, PK3, PK4)
+        P <- sapply(1:4, function(k) f(v[i, time], PK[[k]][i, time]))
+        v[i, time+1] <- ifelse(1 %in% P, 1, 0)
+      } 
+    }
+  }
+
+  list("values"=v, "betaS"=PK, "t.exposed"=t.exposed)
+}
+
+#for visualizing
+animate <- function(HP, v, pause=0.1, col=pal) {
+  v <- v$values
+  h <- HP$host
+  p <- HP$path
+  pal<-(RColorBrewer::brewer.pal(6, "Spectral")) 
+    
+  which.color <- unique(values(h)) %>% sort()
+  for (i in 1:ncol(v)) { #for every time step
+    values(p) <- v[,i] #assign the values of matrix v to raster p at each time step
+    plot(h, asp=NA, col=col[which.color], main=i)
+    plot(p, legend=FALSE, asp=NA, col=scales::alpha(c(NA, "black"), .8), add=T) #plot it
+    dev.flush() #not sure what this does
+    Sys.sleep(pause) #give me .25 sec to see each frame
+  }
+}
+```
+

@@ -115,7 +115,9 @@ BetaS <- function(x, t){
   #I'm going to reconstruct the Y_s(x,t) curves
   Ys <- function(x, t){
     as=pars$mu[pars$par=="as"]
+    #as=4
     ss=pars$mu[pars$par=="ss"]
+    #ss=.000001
     ds=pars$mu[pars$par=="ds"]
     ls=pars$mu[pars$par=="ls"]
     ts=pars$mu[pars$par=="ts"]
@@ -135,15 +137,23 @@ BetaS <- function(x, t){
     B
   }
   beta(t)
+  #dy
 }
 Bs <- sapply(1:50, function(x) BetaS(x, seq(1,t, by=1))) %>% t() #time=col, dist=row
 
-persp3D(z =Bs, phi=0,facets = F, theta = 135, ylab="time", xlab="dist", main="beta secondary infection", bty = "b2")
-persp3D(z =Bs, phi=0,facets = F, theta = 310, ylab="time", xlab="dist", main="beta secondary infection",  bty = "b2")
+persp3D(z =Bs, phi=0,facets = F, theta = 170, ylab="time", xlab="dist", main="beta secondary infection", bty = "b2")
+persp3D(z =Bs, phi=0,facets = F, theta = 300, ylab="time", xlab="dist", main="beta secondary infection",  bty = "b2")
+persp3D(z =Bs, phi=0,facets = F, theta = 30, ylab="time", xlab="dist", main="beta secondary infection",  bty = "b2")
 
 ########################################################
 ########################################################
 #Make dataframe with time, dist, species, transmissiontype, beta
+#do this again for relevant distances: interplanting distances(cm) 1.75 1.90 2.28 3.00
+t=33 #(going to chop off the first 3 days because too much lag)
+Bp <- sapply(1:20, function(x) BetaP(x, seq(1,t, by=1))) %>% t() #time=col, dist=row
+Bp <- Bp[,-(1:3)]
+Bs <- sapply(seq(17.5, 30.0, by=.1), function(x) BetaS(x, seq(1,t, by=1))) %>% t() #time=col, dist=row
+Bs <- Bs[,-(1:3)]
 
 #varying magnitude of infection rates by species.
 #assumes all parameters decay proportionally, which obviously is a big assumption.
@@ -159,12 +169,14 @@ for(i in 1:length(mag)){
   Bss[[i]] <- Bs*mag[i]
 }
 
-Bss[[1]]
-Bps[[1]]
+#persp3D(z =Bss[[1]], phi=0,facets = F, theta = 170, ylab="time", xlab="dist", main="beta secondary infection", bty = "b2")
+#persp3D(z =Bss[[1]], phi=0,facets = F, theta = 270, ylab="time", xlab="dist", main="beta secondary infection", bty = "b2")
+
 #Making dataframe
-d=50
+d=seq(17.5, 30.0, by=.1)
+t=30
 BS <- function(i){
-  data.frame(dist=rep(1:d, t), time=rep(1:t, each=d), species=i, trans="sec", beta=as.vector(Bss[[i]])) 
+  data.frame(dist=rep(d, t), time=rep(1:t, each=length(d)), species=i, trans="sec", beta=as.vector(Bss[[i]])) 
 }
 B1 <- rbind(BS(1), BS(2), BS(3), BS(4), BS(5), BS(6))
 d=20
@@ -180,7 +192,13 @@ head(B3)
 ggplot(filter(B3, trans=="sec", dist==20), aes(time, beta, group=species)) +
   geom_point()+
   geom_line()
+ggplot(filter(B3, trans=="sec", time==3), aes(dist, beta, group=species)) +
+  geom_point()+
+  geom_line()
 ggplot(filter(B3, trans=="prim", dist==20), aes(time, beta, group=species)) +
+  geom_point()+
+  geom_line()
+ggplot(filter(B3, trans=="prim", time==3), aes(dist, beta, group=species)) +
   geom_point()+
   geom_line()
 
