@@ -214,7 +214,7 @@ prepdata <- function(dens, rand){
 #run simulation functions
 s1 <- function(Rich, A, beta, design){
   #Rich=richness level, a=abundance dataframe from `prepdata`; beta=transition probs(csv), design=experimental design (csv)
-  t <- 20
+  t <- 25
   n <- 10 #percent inoculated
   
   #load data
@@ -251,10 +251,199 @@ design <- read.csv("simulation/outputs/design.csv")
 design[2,2] <- 2.29 #for some reason R sucks and hates 2.28. changing it slightly.
 
 #load data. include density and random treatment
-data <- prepdata("sub", F)
+data <- prepdata("add", T)
 #data$A  %>% group_by(R) %>% table()
 
-S1 <- s1(4, data, B, design)
+S1 <- s1(2, data, B, design)
 HP <- S1$HPraster
 sim <- S1$simulate
 animate(HP, sim)
+
+############################################################
+#7. response()
+############################################################
+response <- function(sim, HP){
+  sim=sim
+  HP=HP
+  #data=output from simulate; HP=output from HPraster
+  data <- sim
+  #get data
+  dat <- data$values #state of each cell by time: N x time
+  spp <- as.vector(values(HP$host)) #vector of species present in correct
+  
+  #get table of frequency of each species 
+  fr <- as.data.frame(table(spp))
+  N <- cbind.data.frame("tot", as.numeric(sum(fr$Freq)))
+  names(N) <- names(fr) <- c("species", "n")
+  fr <- rbind(fr, N)
+  
+  ############################################################
+  #make tables of infecteds
+  ############################################################
+  #for each time step, get sum of infecteds and cbind onto existing f dataframe
+  sp <- fr$species[1:length(fr$species)-1]
+  I <- (dat * spp)
+  frI <- fr
+  for(t in 1:ncol(I)){
+    tmp <- sapply(sp, function(i) {
+      sum(I[,t]==sp[i])
+    })
+    tmp[length(tmp)+1] <- sum(tmp)
+    frI <- cbind(frI, tmp)
+  }
+  names(frI) <- c(names(fr), 1:ncol(I))
+  
+  ############################################################
+  #make tables of exposed
+  ############################################################
+  #for each time step, get sum of exposed and cbind onto existing f dataframe
+  
+  #find time infected for every cell
+  t.inf <- sapply(1:nrow(dat), function(i) which(dat[i, ]==1)[1])
+  
+  #table of exposure
+  #first time exposed for each cell
+  data$t.exposed[is.na(data$t.exposed)] <- 99 #change all NAs to 99 so it doesn't have problems finding min
+  t.exposed1 <- apply(data$t.exposed, 1, min)
+  t.exposed1[t.exposed1==99] <- NA #change them back to NA
+  exposure <- data.frame(cell=1:length(t.exposed1), exp.i=t.exposed1, exp.f=t.inf-1)
+  #$exp.f==NA when never infected. $exp.i==NA when never exposed. NA's introduced when 1. never exposed, 2. inoculated, 3. exposed, but not infected
+  #1. never exposed
+  S <- is.na(exposure$exp.i) & is.na(exposure$exp.f)
+  #2. inoculated
+  I <- is.na(exposure$exp.i) & exposure$exp.f==0
+  #3. exposed, never infected
+  E <- exposure$exp.i>0 & is.na(exposure$exp.f)
+  #change values
+  exposure$exp.i[which(S)] <- 0
+  exposure$exp.i[which(I)] <- 0
+  exposure$exp.f[which(S)] <- 0
+  exposure$exp.f[which(I)] <- 0
+  exposure$exp.f[which(E)] <- ncol(dat)
+  
+  for(i in 1:nrow(dat)){
+    #change these values to NA, corresponding to time exposed
+    dat[i, exposure$exp.i[i]:exposure$exp.f[i]] <- NA 
+  }
+  
+  #make matrix for just exposed plants
+  e <- dat
+  e[!is.na(e)] <- 0
+  e[is.na(e)] <- 1
+  
+  #get frequencies of exposed plants
+  E <- e * spp
+  
+  frE <- fr
+  for(t in 1:ncol(E)){
+    tmp <- sapply(sp, function(i) {
+      sum(E[,t]==sp[i])
+    })
+    tmp[length(tmp)+1] <- sum(tmp)
+    frE <- cbind(frE, E=tmp)
+  }
+  names(frE) <- c(names(fr), 1:ncol(E))
+  
+  
+  ############################################################
+  #make table tall
+  ############################################################
+  frI2 <- melt(frI, c("species", "n"), 3:ncol(frI), variable.name = "time", value.name = "n.I")
+  frE2 <- melt(frE, c("species", "n"), 3:ncol(frE), variable.name = "time", value.name = "n.E")
+  fr2 <- left_join(frI2, frE2, by=c("species", "time", "n")) %>% arrange( species) 
+  
+  ############################################################
+  #get n.S and %inf
+  ############################################################
+  fr2$n.S <- fr2$n-fr2$n.I
+  fr2$pI <- fr2$n.I/fr2$n
+  
+  ############################################################
+  #get dI/dt
+  ############################################################
+  #dI/dt = I[t+1]-I[t]
+  di <- function(t) fr2[t,]$n.I-fr2[t-1,]$n.I
+  fr2$dI <- c(NA, di(2:length(fr2$n.I))) 
+  
+  #change all dI where time=1 to NA
+  fr2$dI[fr2$time==1] <- NA
+  
+  #time needs to be numerical
+  fr2$time <- as.numeric(fr2$time)
+  
+  return(fr2)
+}
+RV <- response(sim, HP)
+
+#############################################################
+#8. response.sum()
+#############################################################
+#Summary Response variables
+response.sum <- function(resp){
+  #n.species, n.infected, perc.infected for each species
+  RV1 <- resp %>% 
+    filter(time==max(time)) %>% 
+    group_by(species) %>% 
+    summarize(n, n.I, pI)
+  
+  #dIdt reports
+  RV2 <- resp %>% 
+    group_by(species) %>% 
+    filter(dI==max(dI, na.rm = T)) %>% 
+    filter(!duplicated(dI)) %>% #remove rows with duplicated dI
+    summarise(max.dI=dI, tmax.dI=time)
+  
+  left_join(RV1, RV2, by="species")
+}
+RV2 <- response.sum(RV)
+
+#############################################################
+#8. s2()
+#############################################################
+#simulation function that packages together simulation functions and responses
+s2 <- function(Rich, A, beta, design){
+  #Rich=richness level, a=abundance dataframe from `prepdata`; beta=transition probs(csv), design=experimental design (csv)
+  t <- 15
+  n <- 10 #percent inoculated
+  
+  #load data
+  data <- A
+  A <- data$A #abundances
+  D <- data$D #planting distances
+  dens <- data$dens #density treatment
+  #rand <- data$rand #randomness
+  
+  
+  #do simulation for this community at richness level Rich
+  A1 <- A %>% 
+    filter(R==unique(R)[Rich]) %>% 
+    pull(A)
+  
+  h <- format.comp2(Rich, beta, D, A1, t)
+  HP <- HPraster2(design = design, density = dens, Rich, h, n)
+  sim <- simulate2(h, HP, t)
+  #animate(HP, simtest, pause = .2)
+  
+  #get response variables
+  RV1 <- response(sim, HP)
+  RV2 <- response.sum(RV1)
+  
+  #report
+  return(list("format.comp"=h, "HPraster"=HP, "simulate"=sim, "resp1"=RV1, "resp2"=RV2))
+}
+
+#load data. include density and random treatment
+data <- prepdata("add", T)
+#data$A  %>% group_by(R) %>% table()
+
+S2 <- s2(3, data, B, design)
+RV <- S2$resp1
+
+#plot
+animate(S2$HPraster, S2$simulate, .1)
+ggplot(RV, aes(time, n.I, group=species, col=species))+
+  geom_point()+
+  geom_line()
+ggplot(RV, aes(time, dI, group=species, col=species))+
+  geom_point()+
+  geom_line()
