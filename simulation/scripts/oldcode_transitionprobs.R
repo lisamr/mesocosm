@@ -224,7 +224,7 @@ rs <- function(x, t){
 
 #varying magnitude of infection rates by species.
 #assumes all parameters decay proportionally, which obviously is a big assumption. 
-mag=c(1, .3, .2, .1, 0, 0)
+mag=c(1, .7, .5, .4, .2, .1)
 
 #primary transmission
 t=30
@@ -285,5 +285,6 @@ ggplot(filter(M3, trans=="prim", dist==2), aes(time, beta, group=species)) +
   geom_point()+
   geom_line()
 
-write.csv(M3, "simulation/outputs/rates.csv", row.names = F)
-
+write.csv(M3, "simulation/outputs/rates1.3.2.100.csv", row.names = F)
+write.csv(M3, "simulation/outputs/rates111111.csv", row.names = F)
+write.csv(M3, "simulation/outputs/rates1.7.5.4.2.1.csv", row.names = F)

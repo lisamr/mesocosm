@@ -2,7 +2,10 @@
 
 #load betas, design df, and species abundances
 #B <- read.csv("simulation/outputs/betas.csv")
-B <- read.csv("simulation/outputs/rates.csv")
+B1 <- read.csv("simulation/outputs/rates111111.csv")
+B2 <- read.csv("simulation/outputs/rates1.7.5.4.2.1.csv")
+B3 <- read.csv("simulation/outputs/rates1.3.2.100.csv")
+
 design <- read.csv("simulation/outputs/design.csv")
 design[2,2] <- 2.29 #for some reason R sucks and hates 2.28. changing it slightly.
 D.add <-design %>% filter(d=="add") %>% pull(r)#(planting distances for addititve)

@@ -1,9 +1,11 @@
 #run the whole script `all_sim_functions2.Rmd` to load data and functions
-
+B1 <- read.csv("simulation/outputs/rates111111.csv")
+B2 <- read.csv("simulation/outputs/rates1.7.5.4.2.1.csv")
+B3 <- read.csv("simulation/outputs/rates1.3.2.100.csv")
 #simulation function that packages together simulation functions and responses
 s2 <- function(Rich, A, beta, design){
   #Rich=richness level, a=abundance dataframe from `prepdata`; beta=transition probs(csv), design=experimental design (csv)
-  t <- 15
+  t <- 20
   n <- 10 #percent inoculated
   
   #load data
@@ -33,12 +35,13 @@ s2 <- function(Rich, A, beta, design){
 }
 
 #load data. include density and random treatment
-Random=T
+Random=F
 density="add"
 data <- prepdata(density, Random)
 #data$A  %>% group_by(R) %>% table()
 
-S2 <- s2(1, data, B, design)
+S2 <- s2(4, data, B, design)
+animate(S2$HPraster, S2$simulate)
 
 ############################################################
 #An attempt to generalize
@@ -46,7 +49,7 @@ S2 <- s2(1, data, B, design)
 #load packaged simulation function ex/s2
 
 #simulation and results functions ("f.sim" below)
-results2 <- function(f.sim=s2, nreps=10, density="sub", Random=F){
+results2 <- function(f.sim=s2,B, nreps=10, density="sub", Random=F){
   #density="add" or "sub", Rand=T or F, f.sim=s2
   R <- c(1,2,4,6)
   
@@ -79,45 +82,64 @@ results2 <- function(f.sim=s2, nreps=10, density="sub", Random=F){
   
   return(list("responses"= bres, "response.summary"= bres2))
 }
-SD <-  results2(s2, nreps=10, "sub", F) #substitutive, deterministic
-SR <-  results2(s2, nreps=10, "sub", T) #substitutive, random
-AD <-  results2(s2, nreps=10, "add", F) #additive, deterministic
-AR <-  results2(s2, nreps=10, "add", T) #additive, random
-
-#View(SD$response.summary %>% filter(rich==1))
-
-########################################################################
-########################################################################
-#Plot it!
-#summary plots
-#deterministic
-plotpI <- function(data, main=""){
-  results=data$response.summary
-  results1 <- results %>% 
-    filter(species=="tot")
-  ggplot(results1, aes(rich, pI, group=rep)) +
-    geom_point()+
-    geom_line()+
-    ggtitle(main)
+fb <- function(Beta){
+  SD <-  results2(s2,B=Beta, nreps=10, "sub", F) #substitutive, deterministic
+  SR <-  results2(s2, B=Beta, nreps=10, "sub", T) #substitutive, random
+  AD <-  results2(s2, B=Beta, nreps=10, "add", F) #additive, deterministic
+  AR <-  results2(s2, B=Beta, nreps=10, "add", T) #additive, random
+  rbind(SD$responses, SR$responses, AD$responses, AR$responses)
 }
-resultslist <- list(SD, SR, AD, AR)
-p1 <- plotpI(resultslist[[1]], "substitutive, deterministic")
-p2 <- plotpI(resultslist[[2]], "substitutive, random")
-p3 <- plotpI(resultslist[[3]], "additive, deterministic")
-p4 <- plotpI(resultslist[[4]], "additive, random")
+#results with different "beta" values 
+resB1 <- fb(B1) #high competency across species
+resB2 <- fb(B2) #medium decline in competency across species
+resB3 <- fb(B3) #big decine in competency across species
 
-multiplot(p1, p2, p3, p4, cols = 2)
-#results over time
-results=SD$responses
-results=SR$responses
-results=AD$responses
-results=AR$responses
+########################################################################plot results
+#######################################################################
+head(resB1)
+resB1.1 <- resB1 %>% 
+  filter(time==max(time), species=="tot")
+ggplot(resB1.1, aes(rich, pI))+
+  geom_point()+
+  geom_line(color="grey50", aes(group=interaction(rep, species)))+
+  facet_wrap(~dens+rand)+
+  geom_smooth()
+resB2.1 <- resB2 %>% 
+  filter(time==max(time), species=="tot")
+ggplot(resB2.1, aes(rich, pI))+
+  geom_point()+
+  geom_line(color="grey50", aes(group=interaction(rep, species)))+
+  facet_wrap(~dens+rand)+
+  geom_smooth()
+resB3.1 <- resB3 %>% 
+  filter(time==max(time), species=="tot")
+ggplot(resB3.1, aes(rich, pI))+
+  geom_point()+
+  geom_line(color="grey50", aes(group=interaction(rep, species)))+
+  facet_wrap(~dens+rand)+
+  geom_smooth()
 
-ggplot(filter(results, species=="tot"), aes(time, pI, group=rep)) +
+#adding in community competency (sum(competency x n.I)). competency will be defined as the relative magnitude of transmissions across species. 
+res.1 <- resB2 %>% 
+  mutate("comp"=Rename(c(1, .7, .5, .4, .2, .1 ), c(1:6), resB3$species)) %>% 
+  mutate("comcomp"=comp * n.I) 
+
+res.1 <- resB3 %>% 
+  mutate("comp"=Rename(c(1, .3, .2, .1, 0, 0 ), c(1:6), resB3$species)) %>% 
+  mutate("comcomp"=comp * n.I) 
+
+head(res.1)
+res.2 <- res.1 %>% 
+  filter(time==max(time)) %>% 
+  group_by(rep, dens, rand, rich) %>% 
+  summarise(comcomp=sum(comcomp, na.rm = T))
+ggplot(res.2, aes(rich, comcomp, group=rep))+
   geom_point()+
-  geom_line() +
-  facet_wrap(~rich)
-ggplot(filter(results, species %in% c(1, 2)), aes(time, pI, group=rep, color=species)) +
-  geom_point()+
-  geom_line() +
-  facet_wrap(~rich)
+  geom_line()+
+  facet_wrap(~dens+rand)
+
+x=seq(0,1, .1)
+plot(x, dgamma(x, 1.3, 3), type='o')
+sample(x =seq(0,1, .1),prob =  dgamma(x, 1.3, 3),6)
+
+
