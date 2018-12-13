@@ -97,49 +97,56 @@ resB3 <- fb(B3) #big decine in competency across species
 ########################################################################plot results
 #######################################################################
 head(resB1)
-resB1.1 <- resB1 %>% 
-  filter(time==max(time), species=="tot")
-ggplot(resB1.1, aes(rich, pI))+
-  geom_point()+
-  geom_line(color="grey50", aes(group=interaction(rep, species)))+
-  facet_wrap(~dens+rand)+
-  geom_smooth()
-resB2.1 <- resB2 %>% 
-  filter(time==max(time), species=="tot")
-ggplot(resB2.1, aes(rich, pI))+
-  geom_point()+
-  geom_line(color="grey50", aes(group=interaction(rep, species)))+
-  facet_wrap(~dens+rand)+
-  geom_smooth()
-resB3.1 <- resB3 %>% 
-  filter(time==max(time), species=="tot")
-ggplot(resB3.1, aes(rich, pI))+
-  geom_point()+
-  geom_line(color="grey50", aes(group=interaction(rep, species)))+
-  facet_wrap(~dens+rand)+
-  geom_smooth()
-
-#adding in community competency (sum(competency x n.I)). competency will be defined as the relative magnitude of transmissions across species. 
-res.1 <- resB2 %>% 
-  mutate("comp"=Rename(c(1, .7, .5, .4, .2, .1 ), c(1:6), resB3$species)) %>% 
-  mutate("comcomp"=comp * n.I) 
-
-res.1 <- resB3 %>% 
-  mutate("comp"=Rename(c(1, .3, .2, .1, 0, 0 ), c(1:6), resB3$species)) %>% 
-  mutate("comcomp"=comp * n.I) 
-
-head(res.1)
-res.2 <- res.1 %>% 
-  filter(time==max(time)) %>% 
-  group_by(rep, dens, rand, rich) %>% 
-  summarise(comcomp=sum(comcomp, na.rm = T))
-ggplot(res.2, aes(rich, comcomp, group=rep))+
+#exposure over time
+ggplot(resB3 %>% filter(species==1), aes(time, n.E, group=interaction(rep, rich), color=rich))+
   geom_point()+
   geom_line()+
   facet_wrap(~dens+rand)
 
-x=seq(0,1, .1)
-plot(x, dgamma(x, 1.3, 3), type='o')
-sample(x =seq(0,1, .1),prob =  dgamma(x, 1.3, 3),6)
+#adding in community competency (sum(competency x n.I)). competency will be defined as the relative magnitude of transmissions across species. 
 
+resB2.1 <- resB2 %>% 
+  group_by(rep, dens, rand, rich) %>% 
+  mutate(rel.n=n/n[species == "tot"]) %>% 
+  mutate("comp"=Rename(c(1, .7, .5, .4, .2, .1), c(1:6), species)) %>%
+  mutate("comp_Abund"=comp*n, "comp_relAbund"=comp*rel.n, "comp_nI"=comp*n.I) 
 
+resB3.1 <- resB3 %>% 
+group_by(rep, dens, rand, rich) %>% 
+  mutate(rel.n=n/n[species == "tot"]) %>% 
+  mutate("comp"=Rename(c(1, .3, .2, .1, 0, 0), c(1:6), species)) %>%
+  mutate("comp_Abund"=comp*n, "comp_relAbund"=comp*rel.n, "comp_nI"=comp*n.I) 
+
+head(resB2.1)
+#variables to look at: pI, comp_Abund, comp_relAbund, comp_nI
+resplot <- resB2.1 %>% 
+  filter(time==max(time)) %>% 
+  group_by(rep, dens, rand, rich) %>% 
+  summarise(variable=sum(comp_nI, na.rm = T))
+ggplot(resplot, aes(rich, variable, group=rep))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens+rand)
+ggplot(resB2.1 %>% filter(species=="tot", time==max(time)), aes(rich, pI, group=interaction(rep)))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens+rand)
+
+resplot <- resB3.1 %>% 
+  filter(time==max(time)) %>% 
+  group_by(rep, dens, rand, rich) %>% 
+  summarise(variable=sum(comp_nI, na.rm = T))
+ggplot(resplot, aes(rich, variable, group=rep))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens+rand)
+ggplot(resB3.1 %>% filter(species=="tot", time==max(time)), aes(rich, pI, group=interaction(rep)))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens+rand)
+
+#write.csv(resB2.1, "simulation/outputs/resultsB2.csv")
+#write.csv(resB3.1, "simulation/outputs/resultsB3.csv")
+
+###
+#Make competency reflect Bii, which changes with distance. Values from monospecific simulations. Bii=average exposure/infection rate. See "betaii.R" for how those values were generated.
