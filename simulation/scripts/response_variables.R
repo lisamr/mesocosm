@@ -61,11 +61,11 @@ names(frI) <- c(names(fr), 1:ncol(I))
 t.inf <- sapply(1:nrow(dat), function(i) which(dat[i, ]==1)[1])
 
 #table of exposure
-exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=data$t.exposed, exp.f=t.inf-1)
+exposure <- data.frame(cell=1:nrow(data$t.exposed), exp.i=data$t.exposed, exp.f=t.inf-1)
 #collapse table into 3 columns: cell, exp.i, exp.f
 e.i <- apply(exposure[,2:5], 1, function(x) {min(x, na.rm = T)})
 e.i[is.infinite(e.i)] <- NA
-exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=e.i, exp.f=t.inf-1)
+exposure <- data.frame(cell=1:nrow(data$t.exposed), exp.i=e.i, exp.f=t.inf-1)
 
 #$exp.f==NA when never infected. $exp.i==NA when never exposed. NA's introduced when 1. never exposed, 2. inoculated, 3. exposed, but not infected
 #1. never exposed
@@ -135,8 +135,7 @@ return((fr2))
 }
 
 FOI <- function(sim, HP){
-  
-  
+
   #data=output from simulate; HP=output from HPraster
   data <- sim
   #get data
@@ -147,11 +146,11 @@ FOI <- function(sim, HP){
   t.inf <- sapply(1:nrow(dat), function(i) which(dat[i, ]==1)[1])
   
   #table of exposure
-  exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=data$t.exposed, exp.f=t.inf-1)
+  exposure <- data.frame(cell=1:nrow(data$t.exposed), exp.i=data$t.exposed, exp.f=t.inf-1)
   #collapse table into 3 columns: cell, exp.i, exp.f
   e.i <- apply(exposure[,2:5], 1, function(x) {min(x, na.rm = T)})
   e.i[is.infinite(e.i)] <- NA
-  exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=e.i, exp.f=t.inf-1)
+  exposure <- data.frame(cell=1:nrow(data$t.exposed), exp.i=e.i, exp.f=t.inf-1)
   
   #$exp.f==NA when never infected. $exp.i==NA when never exposed. NA's introduced when 1. never exposed, 2. inoculated, 3. exposed, but not infected
   #1. never exposed
@@ -177,14 +176,12 @@ FOI <- function(sim, HP){
   #FOI = new infections/(# exposed * duration of exposure)
   FOI <- exposure %>% 
     group_by(species) %>% 
-    summarise(FOI = sum(infected)/(sum(exposed) * mean(exp.time))) %>% 
+    summarise(n.E=sum(exposed),  FOI = sum(infected)/(sum(exposed) * mean(exp.time))) %>% 
     ungroup() %>% 
-    bind_rows(summarise(.data = exposure, FOI = sum(infected)/(sum(exposed) * mean(exp.time))))
+    bind_rows(summarise(.data = exposure, n.E=sum(exposed), FOI = sum(infected)/(sum(exposed) * mean(exp.time))))
   FOI$species[nrow(FOI)] <- "tot"
-  
   return(FOI)
 }
-
 ##############################################################
 #Summary Response variables
 ##############################################################
@@ -217,31 +214,12 @@ response.sum <- function(resp, foi){
 ##############################################################
 
 #run simulation
-h1 <- format.comp(plants = abund$R4)
-HP <- HPraster(h1, n = 10)
-vv <- simulate(h1, HP, steps=20, f)
-#animate(HP, vv,pause = .1, col = pal)
+#load data. include density and random treatment
+Random=F
+density="add"
+data <- prepdata(density, Random)
+#data$A  %>% group_by(R) %>% table()
 
-#get results
-RV <- response(vv, HP)
-RVsum <- response.sum(RV)
-head(RVsum)
-head(RV)
-
-#plot
-ggplot(RV, aes(time, n.I, group=species, col=species))+
-  geom_point()+
-  geom_line()
-ggplot(RV, aes(time, dI, group=species, col=species))+
-  geom_point()+
-  geom_line()
-
-
-
-
-
-
-
-
+S2 <- s2(4, data, B, design)
 
 

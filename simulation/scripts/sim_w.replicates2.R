@@ -84,61 +84,43 @@ results2 <- function(f.sim=s2,B, nreps=10, density="sub", Random=F){
   
   return(list("responses"= bres, "response.summary"= bres2))
 }
-fb <- function(Beta){
-  SD <-  results2(s2,B=Beta, nreps=10, "sub", F) #substitutive, deterministic
-  SR <-  results2(s2, B=Beta, nreps=10, "sub", T) #substitutive, random
-  AD <-  results2(s2, B=Beta, nreps=10, "add", F) #additive, deterministic
-  AR <-  results2(s2, B=Beta, nreps=10, "add", T) #additive, random
-  rbind(SD$responses, SR$responses, AD$responses, AR$responses)
+fb <- function(Beta, n=10){
+  SD <-  results2(s2,B=Beta, nreps=n, "sub", F) #substitutive, deterministic
+  SR <-  results2(s2, B=Beta, nreps=n, "sub", T) #substitutive, random
+  AD <-  results2(s2, B=Beta, nreps=n, "add", F) #additive, deterministic
+  AR <-  results2(s2, B=Beta, nreps=n, "add", T) #additive, random
+  response <- rbind(SD$responses, SR$responses, AD$responses, AR$responses)
+  response.summary <- rbind(SD$response.summary, SR$response.summary, AD$response.summary, AR$response.summary)
+  
+  return(list(responses=response, response.summary=response.summary))
 }
 results2(s2, B3, 2, "sub", F)
 
 #results with different "beta" values 
 #resB1 <- fb(B1) #high competency across species
-resB2 <- fb(B2) #medium decline in competency across species
-resB3 <- fb(B3) #big decine in competency across species
+resB2 <- fb(B2, 10) #medium decline in competency across species
+resB3 <- fb(B3, 10) #big decine in competency across species
 
 ########################################################################plot results
 #######################################################################
 #resB2 <- read.csv("simulation/outputs/resultsB2.csv")
 #resB3 <- read.csv("simulation/outputs/resultsB3.csv")
 
-head(resB2)
-#exposure over time
-ggplot(resB3 %>% filter(species==1), aes(time, n.E, group=interaction(rep, rich), color=rich))+
-  geom_point()+
-  geom_line()+
-  facet_wrap(~dens+rand)
-
 #adding in community competency (sum(competency x n.I)). competency will be defined as the relative magnitude of transmissions across species. 
 
-resB2.1 <- resB2 %>% 
+resB2.1 <- resB2[[1]] %>% 
   group_by(rep, dens, rand, rich) %>% 
   mutate(rel.n=n/n[species == "tot"]) %>% 
   mutate("comp"=Rename(c(1, .7, .5, .4, .2, .1), c(1:6), species)) %>%
   mutate("comp_Abund"=comp*n, "comp_relAbund"=comp*rel.n, "comp_nI"=comp*n.I) 
 
-resB3.1 <- resB3 %>% 
+resB3.1 <- resB3[[1]] %>% 
 group_by(rep, dens, rand, rich) %>% 
   mutate(rel.n=n/n[species == "tot"]) %>% 
   mutate("comp"=Rename(c(1, .3, .2, .1, 0, 0), c(1:6), species)) %>%
   mutate("comp_Abund"=comp*n, "comp_relAbund"=comp*rel.n, "comp_nI"=comp*n.I) 
 
-head(resB2.1)
-#variables to look at: pI, comp_Abund, comp_relAbund, comp_nI
-resplot <- resB2.1 %>% 
-  filter(time==max(time)) %>% 
-  group_by(rep, dens, rand, rich) %>% 
-  summarise(variable=sum(comp_nI, na.rm = T))
-ggplot(resplot, aes(rich, variable, group=rep))+
-  geom_point()+
-  geom_line()+
-  facet_wrap(~dens+rand)
-ggplot(resB2.1 %>% filter(species=="tot", time==max(time)), aes(rich, pI, group=interaction(rep)))+
-  geom_point()+
-  geom_line()+
-  facet_wrap(~dens+rand)
-
+#plot (just B3 for now)
 resplot <- resB3.1 %>% 
   filter(time==max(time)) %>% 
   group_by(rep, dens, rand, rich) %>% 
@@ -169,35 +151,39 @@ ggplot(resplot, aes(comp_Abund, pI, group=rep, color=rand, shape=dens))+
   labs(x = "Sum(competency.i x abundance.i)", y="Total proportion infected")
 
 #how does exposure change with abundance?
-#the following code doesn't work. I need total # exposed, but the code double counts the exposed plants. 
-resplot2 <- resB3.1 %>% 
-  group_by(rep, species, dens, rand, rich) %>% 
-  summarise(abund = n[time == 1],
-            n.Ex = sum(n.E),
-            p.Ex = n.Ex/abund)
-ggplot(filter(resplot2, species == "tot"), aes(abund, p.Ex, group=rep, color=rich, shape=dens))+
+resB3.2 <- resB3$response.summary
+resB3.2$pE <- resB3.2$n.E / resB3.2$n
+head(resB3.2)
+ggplot(filter(resB3.2, species == "tot"), aes(n, pE, group=rep, color=rich, shape=dens))+
   geom_point()+
   geom_line()+
   facet_wrap(~dens + rand) +
   labs(x = "# plants", y="proportion exposed")
-ggplot(filter(resplot2, species == "tot"), aes(abund, n.Ex, group=rep, color=rich, shape=dens))+
+ggplot(filter(resB3.2, species == "tot"), aes(rich, pE, group=rep, color=rich, shape=dens))+
   geom_point()+
   geom_line()+
   facet_wrap(~dens + rand) +
-  labs(x = "# plants", y="# exposed")
-ggplot(filter(resplot2, species == 1), aes(abund, n.Ex, group=rep, color=rich, shape=dens))+
+  labs(x = "richness", y="proportion exposed")
+ggplot(filter(resB3.2, species == "tot"), aes(pE, pI, group=rep, color=rich, shape=dens))+
   geom_point()+
   geom_line()+
-  facet_wrap(~dens + rand) +
-  labs(x = "# plants", y="# exposed")
+  #facet_wrap(~dens ) +
+  labs(x = "proportion exposed", y="proportion infected")
 
-ggplot(resB3.1 %>% filter(species=="tot", time==max(time)), aes(rich, pI, group=interaction(rep)))+
+#exposure vs. community competency??
+resplot3 <-  resB3.2 %>% 
+  filter(species == "tot") %>% 
+  mutate(pI=NULL) %>% 
+  left_join(resplot,
+            by = c("rep", "dens", "rand", "rich") )
+ggplot(resplot3, aes(comp_Abund, pE, group=rep, color=rich, shape=dens))+
   geom_point()+
   geom_line()+
-  facet_wrap(~dens+rand)
+  facet_wrap(~dens ) +
+  labs(y = "proportion exposed", x="comp_Abund")
 
-#write.csv(resB2.1, "simulation/outputs/resultsB2.csv")
-#write.csv(resB3.1, "simulation/outputs/resultsB3.csv")
+#write.csv(resB2, "simulation/outputs/resultsB2.csv")
+#write.csv(resB3, "simulation/outputs/resultsB3.csv")
 
 ###
 #Make competency reflect Bii, which changes with distance. Values from monospecific simulations. Bii=average exposure/infection rate. See "betaii.R" for how those values were generated.
