@@ -2,6 +2,7 @@
 B1 <- read.csv("simulation/outputs/rates111111.csv")
 B2 <- read.csv("simulation/outputs/rates1.7.5.4.2.1.csv")
 B3 <- read.csv("simulation/outputs/rates1.3.2.100.csv")
+
 #simulation function that packages together simulation functions and responses
 s2 <- function(Rich, A, beta, design){
   #Rich=richness level, a=abundance dataframe from `prepdata`; beta=transition probs(csv), design=experimental design (csv)
@@ -28,7 +29,8 @@ s2 <- function(Rich, A, beta, design){
   
   #get response variables
   RV1 <- response(sim, HP)
-  RV2 <- response.sum(RV1)
+  foi <- FOI(sim, HP)
+  RV2 <- response.sum(RV1, foi)
   
   #report
   return(list("format.comp"=h, "HPraster"=HP, "simulate"=sim, "resp1"=RV1, "resp2"=RV2))
@@ -40,7 +42,7 @@ density="add"
 data <- prepdata(density, Random)
 #data$A  %>% group_by(R) %>% table()
 
-S2 <- s2(4, data, B, design)
+S2 <- s2(4, data, B, design) #can ignore warnings. Has to do with binding results together
 animate(S2$HPraster, S2$simulate)
 
 ############################################################
@@ -89,14 +91,19 @@ fb <- function(Beta){
   AR <-  results2(s2, B=Beta, nreps=10, "add", T) #additive, random
   rbind(SD$responses, SR$responses, AD$responses, AR$responses)
 }
+results2(s2, B3, 2, "sub", F)
+
 #results with different "beta" values 
-resB1 <- fb(B1) #high competency across species
+#resB1 <- fb(B1) #high competency across species
 resB2 <- fb(B2) #medium decline in competency across species
 resB3 <- fb(B3) #big decine in competency across species
 
 ########################################################################plot results
 #######################################################################
-head(resB1)
+#resB2 <- read.csv("simulation/outputs/resultsB2.csv")
+#resB3 <- read.csv("simulation/outputs/resultsB3.csv")
+
+head(resB2)
 #exposure over time
 ggplot(resB3 %>% filter(species==1), aes(time, n.E, group=interaction(rep, rich), color=rich))+
   geom_point()+
@@ -135,11 +142,55 @@ ggplot(resB2.1 %>% filter(species=="tot", time==max(time)), aes(rich, pI, group=
 resplot <- resB3.1 %>% 
   filter(time==max(time)) %>% 
   group_by(rep, dens, rand, rich) %>% 
-  summarise(variable=sum(comp_nI, na.rm = T))
-ggplot(resplot, aes(rich, variable, group=rep))+
+  summarise(pI=pI[species=="tot"],
+            comp_Abund=sum(comp_Abund, na.rm = T),
+            comp_relAbund=sum(comp_relAbund, na.rm = T),
+            comp_nI=sum(comp_nI, na.rm = T)
+            ) 
+ggplot(resplot, aes(rich, pI, group=rep, color=rand, shape=dens))+
   geom_point()+
   geom_line()+
-  facet_wrap(~dens+rand)
+  facet_wrap(~dens+rand)+
+  labs(x = "Richness", y="Total proportion infected")
+ggplot(resplot, aes(rich, comp_Abund, group=rep, color=rand, shape=dens))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens+rand)+
+  labs(x = "Richness", y="Sum(competency.i x abundance.i)")
+ggplot(resplot, aes(comp_Abund, pI, group=rep, color=rand, shape=dens))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens+rand) +
+  labs(x = "Sum(competency.i x abundance.i)", y="Total proportion infected")
+ggplot(resplot, aes(comp_Abund, pI, group=rep, color=rand, shape=dens))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens) +
+  labs(x = "Sum(competency.i x abundance.i)", y="Total proportion infected")
+
+#how does exposure change with abundance?
+#the following code doesn't work. I need total # exposed, but the code double counts the exposed plants. 
+resplot2 <- resB3.1 %>% 
+  group_by(rep, species, dens, rand, rich) %>% 
+  summarise(abund = n[time == 1],
+            n.Ex = sum(n.E),
+            p.Ex = n.Ex/abund)
+ggplot(filter(resplot2, species == "tot"), aes(abund, p.Ex, group=rep, color=rich, shape=dens))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens + rand) +
+  labs(x = "# plants", y="proportion exposed")
+ggplot(filter(resplot2, species == "tot"), aes(abund, n.Ex, group=rep, color=rich, shape=dens))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens + rand) +
+  labs(x = "# plants", y="# exposed")
+ggplot(filter(resplot2, species == 1), aes(abund, n.Ex, group=rep, color=rich, shape=dens))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens + rand) +
+  labs(x = "# plants", y="# exposed")
+
 ggplot(resB3.1 %>% filter(species=="tot", time==max(time)), aes(rich, pI, group=interaction(rep)))+
   geom_point()+
   geom_line()+

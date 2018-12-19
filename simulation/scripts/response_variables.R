@@ -23,6 +23,7 @@ abund <- read.csv("simulation/outputs/hostabund.csv")
 #percent infected
 ########################################################################
 response <- function(sim, HP){
+
 #data=output from simulate; HP=output from HPraster
   data <- sim
 #get data
@@ -61,6 +62,11 @@ t.inf <- sapply(1:nrow(dat), function(i) which(dat[i, ]==1)[1])
 
 #table of exposure
 exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=data$t.exposed, exp.f=t.inf-1)
+#collapse table into 3 columns: cell, exp.i, exp.f
+e.i <- apply(exposure[,2:5], 1, function(x) {min(x, na.rm = T)})
+e.i[is.infinite(e.i)] <- NA
+exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=e.i, exp.f=t.inf-1)
+
 #$exp.f==NA when never infected. $exp.i==NA when never exposed. NA's introduced when 1. never exposed, 2. inoculated, 3. exposed, but not infected
 #1. never exposed
 S <- is.na(exposure$exp.i) & is.na(exposure$exp.f)
@@ -125,15 +131,67 @@ fr2$dI[fr2$time==1] <- NA
 #time needs to be numerical
 fr2$time <- as.numeric(fr2$time)
 
-return(fr2)
+return((fr2))
+}
+
+FOI <- function(sim, HP){
+  
+  
+  #data=output from simulate; HP=output from HPraster
+  data <- sim
+  #get data
+  dat <- data[[1]] #state of each cell by time: N x time
+  spp <- as.vector(values(HP$host)) #vector of species present in correct
+  
+  #find time infected for every cell
+  t.inf <- sapply(1:nrow(dat), function(i) which(dat[i, ]==1)[1])
+  
+  #table of exposure
+  exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=data$t.exposed, exp.f=t.inf-1)
+  #collapse table into 3 columns: cell, exp.i, exp.f
+  e.i <- apply(exposure[,2:5], 1, function(x) {min(x, na.rm = T)})
+  e.i[is.infinite(e.i)] <- NA
+  exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=e.i, exp.f=t.inf-1)
+  
+  #$exp.f==NA when never infected. $exp.i==NA when never exposed. NA's introduced when 1. never exposed, 2. inoculated, 3. exposed, but not infected
+  #1. never exposed
+  S <- is.na(exposure$exp.i) & is.na(exposure$exp.f)
+  #2. inoculated
+  I <- is.na(exposure$exp.i) & exposure$exp.f==0
+  #3. exposed, never infected
+  E <- exposure$exp.i>0 & is.na(exposure$exp.f)
+  #change values
+  exposure$exp.i[which(S)] <- 0
+  exposure$exp.i[which(I)] <- 0
+  exposure$exp.f[which(S)] <- 0
+  exposure$exp.f[which(I)] <- 0
+  exposure$exp.f[which(E)] <- ncol(dat)
+  
+  #get time exposed for each species
+  exposure$exp.time <- exposure$exp.f - exposure$exp.i
+  exposure$exposed <- ifelse(exposure$exp.time>0, 1, 0)
+  exposure$infected <- ifelse(exposure$exp.f +1 <= ncol(dat), 1, 0)
+  exposure$species <- spp
+  head(exposure)
+  
+  #FOI = new infections/(# exposed * duration of exposure)
+  FOI <- exposure %>% 
+    group_by(species) %>% 
+    summarise(FOI = sum(infected)/(sum(exposed) * mean(exp.time))) %>% 
+    ungroup() %>% 
+    bind_rows(summarise(.data = exposure, FOI = sum(infected)/(sum(exposed) * mean(exp.time))))
+  FOI$species[nrow(FOI)] <- "tot"
+  
+  return(FOI)
 }
 
 ##############################################################
 #Summary Response variables
 ##############################################################
-head(RV)
 
-response.sum <- function(resp){
+
+response.sum <- function(resp, foi){
+
   #n.species, n.infected, perc.infected for each species
   RV1 <- resp %>% 
     filter(time==max(time)) %>% 
@@ -147,9 +205,13 @@ response.sum <- function(resp){
     filter(!duplicated(dI)) %>% #remove rows with duplicated dI
     summarise(max.dI=dI, tmax.dI=time)
   
-  left_join(RV1, RV2, by="species")
+  sum <- left_join(RV1, RV2, by="species")
+  
+  #FOI reports
+  left_join(sum, foi, by = "species") 
+  
 }
-
+#response.sum(response(sim, HP), FOI(sim, HP))
 ##############################################################
 #test it!
 ##############################################################

@@ -20,6 +20,7 @@ library(reshape2)
 #load dat
 ```{r}
 #load betas(sort of ~transition rates), design df
+#see "oldcode_transitionprobs.R" and "species_distribution.R" for how I got the data below.
 #B <- read.csv("simulation/outputs/betas.csv")
 B <- read.csv("simulation/outputs/rates.csv")
 design <- read.csv("simulation/outputs/design.csv")
@@ -274,50 +275,136 @@ animate <- function(HP, v, pause=0.1, col=pal) {
 
 #getting response variables out
 response <- function(sim, HP){
-  sim=sim
-  HP=HP
+
+#data=output from simulate; HP=output from HPraster
+  data <- sim
+#get data
+dat <- data[[1]] #state of each cell by time: N x time
+spp <- as.vector(values(HP$host)) #vector of species present in correct
+
+#get table of frequency of each species 
+fr <- as.data.frame(table(spp))
+N <- cbind.data.frame("tot", as.numeric(sum(fr$Freq)))
+names(N) <- names(fr) <- c("species", "n")
+fr <- rbind(fr, N)
+
+############################################################
+#make tables of infecteds
+############################################################
+#for each time step, get sum of infecteds and cbind onto existing f dataframe
+sp <- fr$species[1:length(fr$species)-1]
+I <- (dat * spp)
+frI <- fr
+for(t in 1:ncol(I)){
+  tmp <- sapply(sp, function(i) {
+    sum(I[,t]==sp[i])
+  })
+  tmp[length(tmp)+1] <- sum(tmp)
+  frI <- cbind(frI, tmp)
+}
+names(frI) <- c(names(fr), 1:ncol(I))
+
+############################################################
+#make tables of exposed
+############################################################
+#for each time step, get sum of exposed and cbind onto existing f dataframe
+
+#find time infected for every cell
+t.inf <- sapply(1:nrow(dat), function(i) which(dat[i, ]==1)[1])
+
+#table of exposure
+exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=data$t.exposed, exp.f=t.inf-1)
+#collapse table into 3 columns: cell, exp.i, exp.f
+e.i <- apply(exposure[,2:5], 1, function(x) {min(x, na.rm = T)})
+e.i[is.infinite(e.i)] <- NA
+exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=e.i, exp.f=t.inf-1)
+
+#$exp.f==NA when never infected. $exp.i==NA when never exposed. NA's introduced when 1. never exposed, 2. inoculated, 3. exposed, but not infected
+#1. never exposed
+S <- is.na(exposure$exp.i) & is.na(exposure$exp.f)
+#2. inoculated
+I <- is.na(exposure$exp.i) & exposure$exp.f==0
+#3. exposed, never infected
+E <- exposure$exp.i>0 & is.na(exposure$exp.f)
+#change values
+exposure$exp.i[which(S)] <- 0
+exposure$exp.i[which(I)] <- 0
+exposure$exp.f[which(S)] <- 0
+exposure$exp.f[which(I)] <- 0
+exposure$exp.f[which(E)] <- ncol(dat)
+
+for(i in 1:nrow(dat)){
+  #change these values to NA, corresponding to time exposed
+  dat[i, exposure$exp.i[i]:exposure$exp.f[i]] <- NA 
+}
+
+#make matrix for just exposed plants
+e <- dat
+e[!is.na(e)] <- 0
+e[is.na(e)] <- 1
+
+#get frequencies of exposed plants
+E <- e * spp
+
+frE <- fr
+for(t in 1:ncol(E)){
+  tmp <- sapply(sp, function(i) {
+    sum(E[,t]==sp[i])
+  })
+  tmp[length(tmp)+1] <- sum(tmp)
+  frE <- cbind(frE, E=tmp)
+}
+names(frE) <- c(names(fr), 1:ncol(E))
+
+
+############################################################
+#make table tall
+############################################################
+frI2 <- melt(frI, c("species", "n"), 3:ncol(frI), variable.name = "time", value.name = "n.I")
+frE2 <- melt(frE, c("species", "n"), 3:ncol(frE), variable.name = "time", value.name = "n.E")
+fr2 <- left_join(frI2, frE2, by=c("species", "time", "n")) %>% arrange( species) 
+
+############################################################
+#get n.S and %inf
+############################################################
+fr2$n.S <- fr2$n-fr2$n.I
+fr2$pI <- fr2$n.I/fr2$n
+
+############################################################
+#get dI/dt
+############################################################
+#dI/dt = I[t+1]-I[t]
+di <- function(t) fr2[t,]$n.I-fr2[t-1,]$n.I
+fr2$dI <- c(NA, di(2:length(fr2$n.I))) 
+
+#change all dI where time=1 to NA
+fr2$dI[fr2$time==1] <- NA
+
+#time needs to be numerical
+fr2$time <- as.numeric(fr2$time)
+
+return((fr2))
+}
+#getting Force of infection
+FOI <- function(sim, HP){
+  
+  
   #data=output from simulate; HP=output from HPraster
   data <- sim
   #get data
-  dat <- data$values #state of each cell by time: N x time
+  dat <- data[[1]] #state of each cell by time: N x time
   spp <- as.vector(values(HP$host)) #vector of species present in correct
-  
-  #get table of frequency of each species 
-  fr <- as.data.frame(table(spp))
-  N <- cbind.data.frame("tot", as.numeric(sum(fr$Freq)))
-  names(N) <- names(fr) <- c("species", "n")
-  fr <- rbind(fr, N)
-  
-  ############################################################
-  #make tables of infecteds
-  ############################################################
-  #for each time step, get sum of infecteds and cbind onto existing f dataframe
-  sp <- fr$species[1:length(fr$species)-1]
-  I <- (dat * spp)
-  frI <- fr
-  for(t in 1:ncol(I)){
-    tmp <- sapply(sp, function(i) {
-      sum(I[,t]==sp[i])
-    })
-    tmp[length(tmp)+1] <- sum(tmp)
-    frI <- cbind(frI, tmp)
-  }
-  names(frI) <- c(names(fr), 1:ncol(I))
-  
-  ############################################################
-  #make tables of exposed
-  ############################################################
-  #for each time step, get sum of exposed and cbind onto existing f dataframe
   
   #find time infected for every cell
   t.inf <- sapply(1:nrow(dat), function(i) which(dat[i, ]==1)[1])
   
   #table of exposure
-  #first time exposed for each cell
-  data$t.exposed[is.na(data$t.exposed)] <- 99 #change all NAs to 99 so it doesn't have problems finding min
-  t.exposed1 <- apply(data$t.exposed, 1, min)
-  t.exposed1[t.exposed1==99] <- NA #change them back to NA
-  exposure <- data.frame(cell=1:length(t.exposed1), exp.i=t.exposed1, exp.f=t.inf-1)
+  exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=data$t.exposed, exp.f=t.inf-1)
+  #collapse table into 3 columns: cell, exp.i, exp.f
+  e.i <- apply(exposure[,2:5], 1, function(x) {min(x, na.rm = T)})
+  e.i[is.infinite(e.i)] <- NA
+  exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=e.i, exp.f=t.inf-1)
+  
   #$exp.f==NA when never infected. $exp.i==NA when never exposed. NA's introduced when 1. never exposed, 2. inoculated, 3. exposed, but not infected
   #1. never exposed
   S <- is.na(exposure$exp.i) & is.na(exposure$exp.f)
@@ -332,61 +419,27 @@ response <- function(sim, HP){
   exposure$exp.f[which(I)] <- 0
   exposure$exp.f[which(E)] <- ncol(dat)
   
-  for(i in 1:nrow(dat)){
-    #change these values to NA, corresponding to time exposed
-    dat[i, exposure$exp.i[i]:exposure$exp.f[i]] <- NA 
-  }
+  #get time exposed for each species
+  exposure$exp.time <- exposure$exp.f - exposure$exp.i
+  exposure$exposed <- ifelse(exposure$exp.time>0, 1, 0)
+  exposure$infected <- ifelse(exposure$exp.f +1 <= ncol(dat), 1, 0)
+  exposure$species <- spp
+  head(exposure)
   
-  #make matrix for just exposed plants
-  e <- dat
-  e[!is.na(e)] <- 0
-  e[is.na(e)] <- 1
+  #FOI = new infections/(# exposed * duration of exposure)
+  FOI <- exposure %>% 
+    group_by(species) %>% 
+    summarise(FOI = sum(infected)/(sum(exposed) * mean(exp.time))) %>% 
+    ungroup() %>% 
+    bind_rows(summarise(.data = exposure, FOI = sum(infected)/(sum(exposed) * mean(exp.time))))
+  FOI$species[nrow(FOI)] <- "tot"
   
-  #get frequencies of exposed plants
-  E <- e * spp
-  
-  frE <- fr
-  for(t in 1:ncol(E)){
-    tmp <- sapply(sp, function(i) {
-      sum(E[,t]==sp[i])
-    })
-    tmp[length(tmp)+1] <- sum(tmp)
-    frE <- cbind(frE, E=tmp)
-  }
-  names(frE) <- c(names(fr), 1:ncol(E))
-  
-  
-  ############################################################
-  #make table tall
-  ############################################################
-  frI2 <- melt(frI, c("species", "n"), 3:ncol(frI), variable.name = "time", value.name = "n.I")
-  frE2 <- melt(frE, c("species", "n"), 3:ncol(frE), variable.name = "time", value.name = "n.E")
-  fr2 <- left_join(frI2, frE2, by=c("species", "time", "n")) %>% arrange( species) 
-  
-  ############################################################
-  #get n.S and %inf
-  ############################################################
-  fr2$n.S <- fr2$n-fr2$n.I
-  fr2$pI <- fr2$n.I/fr2$n
-  
-  ############################################################
-  #get dI/dt
-  ############################################################
-  #dI/dt = I[t+1]-I[t]
-  di <- function(t) fr2[t,]$n.I-fr2[t-1,]$n.I
-  fr2$dI <- c(NA, di(2:length(fr2$n.I))) 
-  
-  #change all dI where time=1 to NA
-  fr2$dI[fr2$time==1] <- NA
-  
-  #time needs to be numerical
-  fr2$time <- as.numeric(fr2$time)
-  
-  return(fr2)
+  return(FOI)
 }
 
 #summary of response variables
-response.sum <- function(resp){
+response.sum <- function(resp, foi){
+
   #n.species, n.infected, perc.infected for each species
   RV1 <- resp %>% 
     filter(time==max(time)) %>% 
@@ -400,7 +453,11 @@ response.sum <- function(resp){
     filter(!duplicated(dI)) %>% #remove rows with duplicated dI
     summarise(max.dI=dI, tmax.dI=time)
   
-  left_join(RV1, RV2, by="species")
+  sum <- left_join(RV1, RV2, by="species")
+  
+  #FOI reports
+  left_join(sum, foi, by = "species") 
+  
 }
 
 #prep data before s2()

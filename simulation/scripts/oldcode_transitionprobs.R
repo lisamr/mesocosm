@@ -275,6 +275,10 @@ M3 <- rbind(M1, M2)
 summary(M3)
 
 head(M3)
+library(plot3D)
+persp3D(z = Mss[[1]], phi=25, theta = 120, xlab="dist", ylab="time", main="secondary rates of infection")
+persp3D(z = Mps[[1]], phi=25, theta = 120, xlab="dist", ylab="time", main="secondary rates of infection")
+
 ggplot(filter(M3, trans=="sec", dist==20), aes(time, beta, group=species)) +
   geom_point()+
   geom_line()

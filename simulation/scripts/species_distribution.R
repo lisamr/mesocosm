@@ -35,6 +35,7 @@ getabund3 <- function(n=100, mu=1, rand=F) {
     pop <- sort(sample(pop, n)) #bring the population back down to desired n. had issues with rounding.
     return(pop)
   }
+  
   getabund2 <- function(n, mu){
     x=c(1,2,4,6)
     counts <- lapply(x, function(r) getabund(r, n, mu))
@@ -55,6 +56,9 @@ getabund3 <- function(n=100, mu=1, rand=F) {
 }
 
 counts2 <- getabund3(200, 1, rand = T)  
+
+#pool comes from a lognormal distribution
+plot(1:6, dlnorm(1:6, 1), type='o')
 
 #################################
 #Abundances with additive treatment
@@ -86,7 +90,7 @@ tmp <- sapply(1:length(N), function(i) {
   cbind(R, A)
   })
 tmp <- do.call("rbind.data.frame", tmp)
-ggplot(tmp, aes(R, group=A, fill=A))+
+ggplot(tmp, aes(R, group=A, fill=as.factor(A)))+
   geom_bar()
 
 #redesigning. Probably the best I'll do.
