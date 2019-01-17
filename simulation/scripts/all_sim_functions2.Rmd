@@ -261,6 +261,7 @@ animate <- function(HP, v, pause=0.1, col=pal) {
   v <- v$values
   h <- HP$host
   p <- HP$path
+  #pal <- viridis::viridis(6,end = .95, direction = -1)
   pal<-(RColorBrewer::brewer.pal(6, "Spectral")) 
     
   which.color <- unique(values(h)) %>% sort()

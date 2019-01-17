@@ -3,7 +3,10 @@ library(ggplot2)
 
 #change color palette
 library(RColorBrewer)
-pal <- brewer.pal(8, "BrBG")
+library(viridis)
+pal<-(RColorBrewer::brewer.pal(6, "Spectral")) 
+pal <- rev(pal)
+#pal <- viridis(6,end = .95)
 ggplot <- function(...) ggplot2::ggplot(...) + scale_fill_manual(values=pal) + scale_color_manual(values=pal) 
 
 #generating needed distributions for the mesocosm simulation
@@ -16,6 +19,20 @@ ggplot <- function(...) ggplot2::ggplot(...) + scale_fill_manual(values=pal) + s
 
 #you have 6 species. get proportion of individuals per species and standardize to a certain number of total individuals.
 
+getabund <- function(r, n, mu){ 
+  #r=richness, n=total individuals, mu=mean of log distribution
+  
+  #get counts of each species
+  n1 = n+max(r) #buffering the number of species so there aren't errors due to rounding
+  pool=dlnorm(1:r, mu) #distribution of each species
+  abund <- pool[1:r]*n1/sum(pool[1:r]) #get abundances of each species for a richness level
+  
+  #get actual population from the counts above 
+  r2=1:length(r)
+  pop <- rep(1:length(abund), abund)
+  pop <- sort(sample(pop, n)) #bring the population back down to desired n. had issues with rounding.
+  return(pop)
+}
 
 #adding in argument "rand" so I can specify if assembly is random
 getabund3 <- function(n=100, mu=1, rand=F) {
@@ -162,16 +179,24 @@ S_R <- getabund4(D.sub, T, 1)
 
 p1 <- ggplot(A_D, aes(R, group=A, fill=A))+
   geom_bar()+
-  labs(title="add, deterministic")
+  labs(title="add, deterministic")+
+  labs(fill="species", x="richness", y="# individuals")+
+  ylim(0, 400)
 p2 <- ggplot(A_R, aes(R, group=A, fill=A))+
   geom_bar()+
-  labs(title="add, random")
+  labs(title="add, stochastic")+
+  labs(fill="species", x="richness", y="# individuals")+
+  ylim(0, 400)
 p3 <- ggplot(S_D, aes(R, group=A, fill=A))+
   geom_bar()+
-  labs(title="sub, deterministic")
+  labs(title="sub, deterministic")+
+  labs(fill="species", x="richness", y="# individuals")+
+  ylim(0, 400)
 p4 <- ggplot(S_R, aes(R, group=A, fill=A))+
   geom_bar()+
-  labs(title="sub, random")
+  labs(title="sub, stochastic")+
+  labs(fill="species", x="richness", y="# individuals")+
+  ylim(0, 400)
 multiplot(p1, p2, p3, p4, cols=2)
 
 #exporting the dimensions of the experiment to csv

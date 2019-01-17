@@ -4,9 +4,8 @@ B2 <- read.csv("simulation/outputs/rates1.7.5.4.2.1.csv")
 B3 <- read.csv("simulation/outputs/rates1.3.2.100.csv")
 
 #simulation function that packages together simulation functions and responses
-s2 <- function(Rich, A, beta, design){
+s2 <- function(Rich, A, beta, design, t=20){
   #Rich=richness level, a=abundance dataframe from `prepdata`; beta=transition probs(csv), design=experimental design (csv)
-  t <- 20
   n <- 10 #percent inoculated
   
   #load data
@@ -42,7 +41,7 @@ density="add"
 data <- prepdata(density, Random)
 #data$A  %>% group_by(R) %>% table()
 
-S2 <- s2(4, data, B, design) #can ignore warnings. Has to do with binding results together
+S2 <- s2(1, data, B, design, 40) #can ignore warnings. Has to do with binding results together
 animate(S2$HPraster, S2$simulate)
 
 ############################################################
@@ -99,7 +98,7 @@ results2(s2, B3, 2, "sub", F)
 #results with different "beta" values 
 #resB1 <- fb(B1) #high competency across species
 resB2 <- fb(B2, 10) #medium decline in competency across species
-resB3 <- fb(B3, 10) #big decine in competency across species
+resB3 <- fb(B3, 20) #big decine in competency across species
 
 ########################################################################plot results
 #######################################################################
@@ -108,11 +107,9 @@ resB3 <- fb(B3, 10) #big decine in competency across species
 
 #adding in community competency (sum(competency x n.I)). competency will be defined as the relative magnitude of transmissions across species. 
 
-resB2.1 <- resB2[[1]] %>% 
-  group_by(rep, dens, rand, rich) %>% 
-  mutate(rel.n=n/n[species == "tot"]) %>% 
-  mutate("comp"=Rename(c(1, .7, .5, .4, .2, .1), c(1:6), species)) %>%
-  mutate("comp_Abund"=comp*n, "comp_relAbund"=comp*rel.n, "comp_nI"=comp*n.I) 
+#resB2.1 <- resB2[[1]] %>% group_by(rep, dens, rand, rich) %>% mutate(rel.n=n/n[species == "tot"]) %>% mutate("comp"=Rename(c(1, .7, .5, .4, .2, .1), c(1:6), species)) %>% mutate("comp_Abund"=comp*n, "comp_relAbund"=comp*rel.n, "comp_nI"=comp*n.I) 
+ggplot <- function(...) ggplot2::ggplot(...) + scale_fill_manual(values=pal) + scale_color_manual(values=pal) 
+ggplot <- function(...) ggplot2::ggplot(...) 
 
 resB3.1 <- resB3[[1]] %>% 
 group_by(rep, dens, rand, rich) %>% 
@@ -126,29 +123,33 @@ resplot <- resB3.1 %>%
   group_by(rep, dens, rand, rich) %>% 
   summarise(pI=pI[species=="tot"],
             comp_Abund=sum(comp_Abund, na.rm = T),
-            comp_relAbund=sum(comp_relAbund, na.rm = T),
-            comp_nI=sum(comp_nI, na.rm = T)
-            ) 
-ggplot(resplot, aes(rich, pI, group=rep, color=rand, shape=dens))+
+            comp_Abund.N=sum(comp_Abund, na.rm = T)/n[species=="tot"],
+            comp_nI=sum(comp_nI, na.rm = T)            ) 
+ggplot(resplot, aes(rich, pI, color=dens, shape=rand))+
   geom_point()+
-  geom_line()+
-  facet_wrap(~dens+rand)+
-  labs(x = "Richness", y="Total proportion infected")
-ggplot(resplot, aes(rich, comp_Abund, group=rep, color=rand, shape=dens))+
+  geom_line(aes(group=rep))+
+  geom_smooth(method = "lm", formula = y ~poly(x,3), color="black", lwd=.5)+
+  facet_wrap(~rand+dens)+
+  labs(color="density", shape="stochastic?", y="proportion infected", x="richness")
+ggplot(resplot, aes(rich, comp_Abund, color=dens, shape=rand))+
   geom_point()+
-  geom_line()+
-  facet_wrap(~dens+rand)+
-  labs(x = "Richness", y="Sum(competency.i x abundance.i)")
-ggplot(resplot, aes(comp_Abund, pI, group=rep, color=rand, shape=dens))+
+  geom_line(aes(group=rep))+
+  #geom_smooth(method = "lm", formula = y ~poly(x,2), color="black")+
+  facet_wrap(~rand+dens)+
+  labs(color="density", shape="stochastic?", y="sum(competency x abundance)", x="richness")
+ggplot(resplot, aes(rich, comp_Abund.N, color=dens, shape=rand))+
   geom_point()+
-  geom_line()+
-  facet_wrap(~dens+rand) +
-  labs(x = "Sum(competency.i x abundance.i)", y="Total proportion infected")
-ggplot(resplot, aes(comp_Abund, pI, group=rep, color=rand, shape=dens))+
-  geom_point()+
-  geom_line()+
-  facet_wrap(~dens) +
-  labs(x = "Sum(competency.i x abundance.i)", y="Total proportion infected")
+  geom_line(aes(group=rep))+
+  #geom_smooth(method = "lm", formula = y ~poly(x,2), color="black")+
+  facet_wrap(~rand+dens)+
+  labs(color="density", shape="stochastic?", y="sum(competency x abundance)", x="richness")
+ggplot(filter(resplot), aes(comp_Abund, pI, color=dens))+
+  geom_point(aes(shape=rand))+
+  #geom_line(aes(group=rep))+
+  #geom_smooth(aes(group=rand),color="black")+
+  geom_smooth(color="black")+
+  facet_wrap(~dens)+
+  labs(color="density", shape="stochastic?", x="sum(competency x abundance)", y="proportion infected")
 
 #how does exposure change with abundance?
 resB3.2 <- resB3$response.summary
@@ -157,33 +158,85 @@ head(resB3.2)
 ggplot(filter(resB3.2, species == "tot"), aes(n, pE, group=rep, color=rich, shape=dens))+
   geom_point()+
   geom_line()+
-  facet_wrap(~dens + rand) +
-  labs(x = "# plants", y="proportion exposed")
+  facet_wrap(~dens + rand) 
+ggplot(filter(resB3.2, species == "tot"), aes(n, pI, group=rep, color=rich, shape=dens))+
+  geom_point()+
+  facet_wrap(~rich)
 ggplot(filter(resB3.2, species == "tot"), aes(rich, pE, group=rep, color=rich, shape=dens))+
   geom_point()+
   geom_line()+
-  facet_wrap(~dens + rand) +
-  labs(x = "richness", y="proportion exposed")
+  facet_wrap(~dens + rand) 
 ggplot(filter(resB3.2, species == "tot"), aes(pE, pI, group=rep, color=rich, shape=dens))+
-  geom_point()+
-  geom_line()+
-  #facet_wrap(~dens ) +
-  labs(x = "proportion exposed", y="proportion infected")
+  geom_point()
+  #geom_line()
+  #facet_wrap(~dens ) 
 
 #exposure vs. community competency??
 resplot3 <-  resB3.2 %>% 
-  filter(species == "tot") %>% 
   mutate(pI=NULL) %>% 
   left_join(resplot,
-            by = c("rep", "dens", "rand", "rich") )
-ggplot(resplot3, aes(comp_Abund, pE, group=rep, color=rich, shape=dens))+
+            by = c("rep", "dens", "rand", "rich") ) 
+ggplot(filter(resplot3, species=='tot'), aes(comp_Abund.N, pE, color=rich, shape=dens))+
   geom_point()+
-  geom_line()+
+  #geom_line()+
+  geom_smooth()+
+  facet_wrap(~dens ) 
+ggplot(filter(resplot3, species=='tot'), aes(comp_Abund.N, pE, color=dens))+
+  geom_point()+
+  #geom_line()+
+  geom_smooth()+
   facet_wrap(~dens ) +
-  labs(y = "proportion exposed", x="comp_Abund")
+  labs(x="sum(competency x abundance)/N", y="# exposed")
+ggplot(filter(resplot3, species=='tot'), aes(comp_Abund, n.E, color=dens))+
+  geom_point()+
+  #geom_line()+
+  geom_smooth()+
+  facet_wrap(~dens ) +
+  labs(x="sum(competency x abundance)/N", y="# exposed")
+ggplot(filter(resplot3, species=='tot'), aes(comp_Abund.N, pI, shape=dens))+
+  geom_point()+
+  geom_smooth()+
+  #geom_line()+
+  facet_wrap(~dens ) +
+  labs(x="sum(competency x abundance)/N", y="proportion infected")
 
+#get exposure weighted by competency vs comm. comp.
+#vector of competency
+mag <- c(1, .3, .2, .1, 0, 0, NA)
+resplot3 <- resplot3 %>% 
+  mutate(comp.i = Rename(values_to = mag, index_from = as.character(c(1, 2, 3, 4, 5, 6, "tot")), from_column = resplot3$species),
+         n.Eweighted = n.E * comp.i) %>% 
+  group_by(rep, dens, rand, rich) %>% 
+  mutate(n.Eweighted = ifelse(species == "tot", sum(n.Eweighted, na.rm = T), n.Eweighted ),
+         p.Eweighted = n.Eweighted/n[species == "tot"])
+
+#exposure drives infection across all treatments
+ggplot(filter(resplot3, species == "tot"), aes(p.Eweighted, pI, color=rich, shape=dens))+
+  geom_point()
+ggplot(filter(resplot3, species == "tot"), aes(pE, pI, color=rich, shape=dens))+
+  geom_point()
+
+#as avg community competency goes up, proportion exposed goes up
+ggplot(filter(resplot3, species == "tot"), aes(pcomp_Abund, p.Eweighted, color=rich, shape=dens))+
+  geom_point()+
+  geom_smooth()+
+  facet_wrap(~dens ) 
+ggplot(filter(resplot3, species == "tot"), aes(pcomp_Abund, pE, color=rich, shape=dens))+
+  geom_point()+
+  geom_smooth()+
+  facet_wrap(~dens ) 
+names(resplot3)
+#which explains why pI decreses with higher commuity competency
+ggplot(filter(resplot3, species == "tot"), aes(rich, pI, color=rich, shape=dens))+
+  geom_point()+
+  geom_smooth()+
+  facet_wrap(~dens + rand ) 
+
+
+write.csv(resB3$response.summary, "simulation/outputs/B3.respsum.csv", row.names = F)
+write.csv(resB3$responses, "simulation/outputs/B3.resp.csv", row.names = F)
 #write.csv(resB2, "simulation/outputs/resultsB2.csv")
-#write.csv(resB3, "simulation/outputs/resultsB3.csv")
+#write.csv(resplot3, "simulation/outputs/resplot3B3.csv", row.names = F)
 
 ###
 #Make competency reflect Bii, which changes with distance. Values from monospecific simulations. Bii=average exposure/infection rate. See "betaii.R" for how those values were generated.
