@@ -98,7 +98,7 @@ results2(s2, B3, 2, "sub", F)
 #results with different "beta" values 
 #resB1 <- fb(B1) #high competency across species
 resB2 <- fb(B2, 10) #medium decline in competency across species
-resB3 <- fb(B3, 20) #big decine in competency across species
+resB3 <- fb(B3, 10) #big decine in competency across species
 
 ########################################################################plot results
 #######################################################################
@@ -110,6 +110,7 @@ resB3 <- fb(B3, 20) #big decine in competency across species
 #resB2.1 <- resB2[[1]] %>% group_by(rep, dens, rand, rich) %>% mutate(rel.n=n/n[species == "tot"]) %>% mutate("comp"=Rename(c(1, .7, .5, .4, .2, .1), c(1:6), species)) %>% mutate("comp_Abund"=comp*n, "comp_relAbund"=comp*rel.n, "comp_nI"=comp*n.I) 
 ggplot <- function(...) ggplot2::ggplot(...) + scale_fill_manual(values=pal) + scale_color_manual(values=pal) 
 ggplot <- function(...) ggplot2::ggplot(...) 
+
 
 resB3.1 <- resB3[[1]] %>% 
 group_by(rep, dens, rand, rich) %>% 
@@ -171,37 +172,24 @@ ggplot(filter(resB3.2, species == "tot"), aes(pE, pI, group=rep, color=rich, sha
   #geom_line()
   #facet_wrap(~dens ) 
 
-#exposure vs. community competency??
+#richness vs. PI and richness vs FOI
+ggplot(filter(resB3.2, species == "tot"), aes(rich, pI, group=rep, color=rich, shape=dens))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens + rand) 
+ggplot(filter(resB3.2, species == "tot"), aes(rich, FOI, group=rep, color=rich, shape=dens))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens + rand, scales = "free") 
+
+
+
+#get exposure weighted by competency vs comm. comp.
+#vector of competency
 resplot3 <-  resB3.2 %>% 
   mutate(pI=NULL) %>% 
   left_join(resplot,
             by = c("rep", "dens", "rand", "rich") ) 
-ggplot(filter(resplot3, species=='tot'), aes(comp_Abund.N, pE, color=rich, shape=dens))+
-  geom_point()+
-  #geom_line()+
-  geom_smooth()+
-  facet_wrap(~dens ) 
-ggplot(filter(resplot3, species=='tot'), aes(comp_Abund.N, pE, color=dens))+
-  geom_point()+
-  #geom_line()+
-  geom_smooth()+
-  facet_wrap(~dens ) +
-  labs(x="sum(competency x abundance)/N", y="# exposed")
-ggplot(filter(resplot3, species=='tot'), aes(comp_Abund, n.E, color=dens))+
-  geom_point()+
-  #geom_line()+
-  geom_smooth()+
-  facet_wrap(~dens ) +
-  labs(x="sum(competency x abundance)/N", y="# exposed")
-ggplot(filter(resplot3, species=='tot'), aes(comp_Abund.N, pI, shape=dens))+
-  geom_point()+
-  geom_smooth()+
-  #geom_line()+
-  facet_wrap(~dens ) +
-  labs(x="sum(competency x abundance)/N", y="proportion infected")
-
-#get exposure weighted by competency vs comm. comp.
-#vector of competency
 mag <- c(1, .3, .2, .1, 0, 0, NA)
 resplot3 <- resplot3 %>% 
   mutate(comp.i = Rename(values_to = mag, index_from = as.character(c(1, 2, 3, 4, 5, 6, "tot")), from_column = resplot3$species),
@@ -211,10 +199,49 @@ resplot3 <- resplot3 %>%
          p.Eweighted = n.Eweighted/n[species == "tot"])
 
 #exposure drives infection across all treatments
+ggplot(filter(resplot3, species == "tot"), aes(rich, comp_Abund, color=rich, shape=dens, group=rep))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens+rand)
 ggplot(filter(resplot3, species == "tot"), aes(p.Eweighted, pI, color=rich, shape=dens))+
   geom_point()
 ggplot(filter(resplot3, species == "tot"), aes(pE, pI, color=rich, shape=dens))+
   geom_point()
+
+#richness vs percent infected of species1?
+resplot4 <- resplot3 %>%  
+  group_by(rep, dens, rand, rich) %>%  filter(any(species==1)) %>% 
+  summarise(n.1 = n[species==1],
+            nI.1 = n.I[species==1],
+            nE.1 = n.E[species==1],
+            pE.1 = pE[species==1],
+            p.Eweighted = p.Eweighted[species==1],
+            pI.1 = pI[species==1],
+            N = n[species=="tot"]) 
+
+#seems like it's maybe a function of  exposure and density
+ggplot(resplot4, aes(rich, pI.1, color=pE.1, group=rep, shape=dens))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens+rand)+
+  ylim(0,1)
+ggplot(filter(resplot4, rand==F), aes(rich, pI.1, color=pE.1, group=rep, shape=dens))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens+rand)+
+  ylim(0,1)
+ggplot(filter(resplot4, rand==F), aes(rich, pE.1,group=rep, shape=dens))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~dens+rand)+
+  ylim(0,1)
+ggplot(filter(resplot4, rand==F), aes(pE.1, pI.1, color=rich))+
+  geom_point()
+ggplot(filter(resplot4, rand==F), aes(p.Eweighted, pI.1, color=rich))+
+  geom_point()
+ggplot(resplot4, aes(N, pI.1, color=pE.1))+
+  geom_point()
+
 
 #as avg community competency goes up, proportion exposed goes up
 ggplot(filter(resplot3, species == "tot"), aes(pcomp_Abund, p.Eweighted, color=rich, shape=dens))+

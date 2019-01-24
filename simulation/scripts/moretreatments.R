@@ -14,7 +14,37 @@ prepdata2 <- function(dens, rand, design){
   A <- getabund4(D, rand, 1) 
   list(A=A, D=D, dens=dens, rand=rand)
 }
-
+#simulation function that packages together simulation functions and responses
+s2 <- function(Rich, A, beta, design, t=20){
+  #Rich=richness level, a=abundance dataframe from `prepdata`; beta=transition probs(csv), design=experimental design (csv)
+  n <- 10 #percent inoculated
+  
+  #load data
+  data <- A
+  A <- data$A #abundances
+  D <- data$D #planting distances
+  dens <- data$dens #density treatment
+  #rand <- data$rand #randomness
+  
+  
+  #do simulation for this community at richness level Rich
+  A1 <- A %>% 
+    filter(R==unique(R)[Rich]) %>% 
+    pull(A)
+  
+  h <- format.comp2(Rich, beta, D, A1, t)
+  HP <- HPraster2(design = design, density = dens, Rich, h, n)
+  sim <- simulate2(h, HP, t)
+  #animate(HP, simtest, pause = .2)
+  
+  #get response variables
+  RV1 <- response(sim, HP)
+  foi <- FOI(sim, HP)
+  RV2 <- response.sum(RV1, foi)
+  
+  #report
+  return(list("format.comp"=h, "HPraster"=HP, "simulate"=sim, "resp1"=RV1, "resp2"=RV2))
+}
 #load data. include density and random treatment
 Random=F
 density="sub"
@@ -65,6 +95,7 @@ fb2 <- function(Beta, n=10, design){
  
   return(response)
 }
+
 results3(s2, B, 2, "sub", F, design.392)
 
 #bind all the treatments together. resnormal is what has been orignally run and the res with numbers are those with additional substitutive treatments at different densities.
@@ -80,6 +111,8 @@ head(resbind)
 results <- resbind %>% 
   mutate("comp"=Rename(c(1, .3, .2, .1, 0, 0), c(1:6), species)) %>%
   mutate("comp_Abund"=comp*n) %>% 
+  mutate(rand=Rename(c("deterministic", "stochastic"), c("FALSE", "TRUE"), rand),
+         dens = Rename(c("additive", "substitutive"), c("add", "sub"), dens)) %>% 
   filter(time==max(time)) %>%
   group_by(rep, dens, rand,rich, densN) %>% 
   summarise(N = n[species=="tot"],
@@ -88,37 +121,25 @@ results <- resbind %>%
             comp_Abund=sum(comp_Abund, na.rm = T),
             comp_Abund.N=sum(comp_Abund, na.rm = T)/N) 
 
-ggplot(filter(results, is.na(densN)), aes(rich, pI, color=dens, shape=rand))+
-  geom_point()+
+ggplot(filter(results, is.na(densN)), aes(rich, pI))+
+  geom_point(cex=2)+
   geom_line(aes(group=rep))+
   #geom_smooth(method = "lm", formula = y ~poly(x,3), color="black", lwd=.5)+
   facet_wrap(~rand+dens)+
-  labs(color="density", shape="stochastic?", y="proportion infected", x="richness")
-ggplot(filter(results, is.na(densN)), aes(rich, n.I, color=dens, shape=rand))+
-  geom_point()+
+  labs( y="proportion infected", x="richness") +
+  scale_color_manual(values = viridis(2, begin = .25, end= .65, alpha=.8)) +
+  theme(strip.background = element_rect(color="black", fill="white"))
+
+#maybe # infected is better than percent infected.
+ggplot(filter(results, is.na(densN)), aes(rich, n.I))+
+  geom_point(cex=2)+
   geom_line(aes(group=rep))+
-  #geom_smooth(method = "lm", formula = y ~poly(x,3), color="black", lwd=.5)+
+  #geom_point(data=results, aes(rich, pI), alpha=.5, color="black")+
   facet_wrap(~rand+dens)+
-  labs(color="density", shape="stochastic?", y="# infected", x="richness")
-ggplot(filter(results, is.na(densN)), aes(rich, comp_Abund, color=dens, shape=rand))+
-  geom_point()+
-  geom_line(aes(group=rep))+
-  #geom_smooth(method = "lm", formula = y ~poly(x,2), color="black")+
-  facet_wrap(~rand+dens)+
-  labs(color="density", shape="stochastic?", y="sum(competency x abundance)", x="richness")
-ggplot(filter(results, is.na(densN)), aes(rich, comp_Abund.N, color=dens, shape=rand))+
-  geom_point()+
-  geom_line(aes(group=rep))+
-  #geom_smooth(method = "lm", formula = y ~poly(x,2), color="black")+
-  facet_wrap(~rand+dens)+
-  labs(color="density", shape="stochastic?", y="sum(competency x abundance)/N", x="richness")
-ggplot(filter(results, is.na(densN)), aes(comp_Abund.N, pI, color=as.factor(rich)))+
-  geom_point(aes(shape=rand))+
-  #geom_line(aes(group=rep))+
-  #geom_smooth(aes(group=rand),color="black")+
-  geom_smooth(color="black")+
-  facet_wrap(~dens)+
-  labs(color="density", shape="stochastic?", x="sum(competency x abundance)/N", y="proportion infected")
+  labs( y="# infected", x="richness") +
+  theme(strip.background = element_rect(color="black", fill="white"))
+ggplot(filter(results), aes(comp_Abund, n.I, color=N, shape=rand))+
+  geom_point(cex=2)
 
 #relative community comp vs proportion infected, grouped by density.
 head(results)
@@ -136,8 +157,29 @@ ggplot(filter(results, !N==300), aes(N, pI, group=comp_Abund.Ncut, color=(comp_A
 ggplot(filter(results, !N==300), aes(N, pI, color=comp_Abund.N))+
   geom_point()
 
-#try fitting that plot to a parameter surface to see how density and community competency interact to affect incidence
-require(plot3D)
+#try fitting that plot to a parameter surface to see how density and community competency interact to affect incidence. THIS IS IT!!!!
+parplot <- function(data, model){
+  require(plot3D)
+  N.pred <- seq(min(data$N), max(data$N), length.out = 30 )
+  comp.pred <- seq(min(data$comp_Abund.N), max(data$comp_Abund.N), length.out = 30 )
+  xy <- expand.grid(N = N.pred, comp_Abund.N = comp.pred)
+  
+  pI.pred <- matrix (nrow = 30, ncol = 30, 
+                     data = predict(model, newdata = data.frame(xy), interval = "prediction"))
+  
+  # predicted z-values, fitted points for droplines to surface
+  fitpoints <- predict(model) 
+  
+  scatter3D(z = data$pI, x = data$N, y = data$comp_Abund.N,
+            theta = 20, phi = 20, ticktype = "detailed",
+            pch=16, cex=.8, col = viridis(100, direction=1),
+            xlab = "N", ylab = "comp_Abund.N", zlab = "pI", clab = "pI", 
+            surf = list(x = N.pred, y = comp.pred, z = pI.pred, 
+                        facets = NA, alpha=.7, fit = fitpoints),
+            colkey = list(length = 0.8, width = 0.4),            
+            main = "Proportion infected")
+}
+
 
 # linear fit
 fit <- lm(pI ~ N*comp_Abund.N, data = results)
@@ -148,37 +190,287 @@ fit4 <- lm(pI ~ poly(comp_Abund.N, 3) * poly(N,2), data = results)
 fit5 <- lm(pI ~ poly(comp_Abund.N, 3) * poly(N,3), data = results)
 AIC(fit, fit1, fit2, fit3, fit4, fit5)
 
-#fit 5 is the best
+#fit 5 is the best. residuals are normal and variance is equal.
 plot(fit5)
 hist(resid(fit5))
-plot(fitted.values(fit5) ~ results$pI) + abline(0,1) #overestimates pI at higher values by a little.
+plot(resid(fit5))
+plot(results$pI ~ fitted.values(fit5)) + abline(0,1) #overestimates pI at higher values by a little.
+rmse <- function(p, o){
+  sqrt(mean((p-o)^2))
+}
+rmse(fitted.values(fit5), results$pI)
+r2 <- lm(results$pI ~ fitted.values(fit5))
+summary(r2)
+
+parplot(results, fit5)
+
+#highlight the points in the additive and substitutive designs shown in the first figure.
+
+  require(plot3D)
+  N.pred <- seq(min(results$N), max(results$N), length.out = 30 )
+  comp.pred <- seq(min(results$comp_Abund.N), max(results$comp_Abund.N), length.out = 30 )
+  xy <- expand.grid(N = N.pred, comp_Abund.N = comp.pred)
+  
+  pI.pred <- matrix (nrow = 30, ncol = 30, 
+                     data = predict(fit5, newdata = data.frame(xy), interval = "prediction"))
+  
+  # predicted z-values, fitted points for droplines to surface
+  fitpoints <- predict(fit5) 
+  v=viridis(100, direction=1)
+  #results2 <- arrange(results, N)
+  results$shape <- ifelse(results$dens=="additive" & results$rand=="deterministic", 21,20)
+  results$cex <- ifelse(results$dens=="additive" & results$rand=="deterministic", 1.1,1)
+
+  scatter3D(z = results$pI, x = results$N, y=results$comp_Abund.N,
+            theta = 20, phi = 20, ticktype = "detailed",
+            pch=results$shape, cex=results$cex, col=v,
+            xlab = "# individuals", ylab = "Community competency", zlab = "Incidence", clab = "Incidence", 
+            surf = list(x = N.pred, y = comp.pred, z = pI.pred, 
+                        facets = NA, alpha=.7, fit = fitpoints),
+            colkey = list(length = 0.8, width = 0.4))
+
+
+######################################################################
+######################################################################
+
+#I need to be able to make this design empirically tractable. In order to get the parameter surface above, I did 6 times as many treatments. Obviously I cant do that in real life. 
+#try filtering out the results and see if you can still come up with the same conclusions.
+#keep 1, 2, 4 species at the same additive densities (128, 210, 338 individuals). those densities seem good enough to approximate the parameter surface.
+
+results.f <- results %>% 
+  mutate(densN = ifelse(is.na(densN), "orig", densN)) %>% 
+  filter(densN!="sub392", rich!=6) 
+
+#compare additive vs sub and assembly orders  
+ggplot(filter(results.f, densN=="orig"), aes(rich, pI, color=dens, shape=rand))+
+  geom_point()+
+  geom_line(aes(group=rep))+
+  #geom_smooth(method = "lm", formula = y ~poly(x,3), color="black", lwd=.5)+
+  facet_wrap(~rand+dens)+
+  labs(color="density", shape="stochastic?", y="proportion infected", x="richness")
+
+#visualize parametric surface
+ggplot(filter(results.f, densN!="orig"), aes(N, pI, color=comp_Abund.N))+
+  geom_point()
+
+results.f2 <- filter(results.f, densN!="orig")
+# linear fit
+fit <- lm(pI ~ N*comp_Abund.N, data = results.f2)
+fit1 <- lm(pI ~ N+comp_Abund.N, data = results.f2)
+fit2 <- lm(pI ~ poly(comp_Abund.N, 3) + N, data = results.f2)
+fit3 <- lm(pI ~ poly(comp_Abund.N, 3) + poly(N,2), data = results.f2)
+fit4 <- lm(pI ~ poly(comp_Abund.N, 3) * poly(N,2), data = results.f2)
+fit5 <- lm(pI ~ poly(comp_Abund.N, 2) * poly(N,2), data = results.f2)
+AIC(fit, fit1, fit2, fit3, fit4, fit5)
+
+anova(fit5, fit4) 
+#fit4 is the best. can't do 3rd degree polynomial for density because max is D-levels - 1
+parplot(results.f2, fit4)
+
+###
+#HEY, CAN YOU DO THIS WITH YOUR ORIGINAL DESIGN?????
+#not without adding a few more communities. there aren't enough communities with high density and community competency, producing spurious results.
+results.orig <- results %>% filter(is.na(densN))
+
+ggplot(results.orig, aes(N, pI, color=comp_Abund.N))+
+  geom_point() #looks like the data is missing a few key communities for the surface to be accurately fitted, but maybe you can just augment the design a little.
+
+# linear fit
+fit <- lm(pI ~ N*comp_Abund.N, data = results.orig)
+fit1 <- lm(pI ~ N+comp_Abund.N, data = results.orig)
+fit2 <- lm(pI ~ poly(comp_Abund.N, 3) + N, data = results.orig)
+fit3 <- lm(pI ~ poly(comp_Abund.N, 3) + poly(N,2), data = results.orig)
+fit4 <- lm(pI ~ poly(comp_Abund.N, 2) * poly(N,2), data = results.orig)
+fit5 <- lm(pI ~ poly(comp_Abund.N, 3) * poly(N,2), data = results.orig)
+fit6 <- lm(pI ~ poly(comp_Abund.N, 2) * poly(N,3), data = results.orig)
+fit7 <- lm(pI ~ poly(comp_Abund.N, 3) * poly(N,3), data = results.orig)
+AIC(fit, fit1, fit2, fit3, fit4, fit5, fit6, fit7)
+
+anova(fit7, fit5) 
+anova(fit3, fit5) 
+#fit5 is the best. lowest AIC. fit7 is what I used when I added those extra treatments, which is not significantly different from fit5.
+
+parplot(results.orig, fit5)
+################################################################
+################################################################
+#How about just make the substitutive design at 392 individuals?
+fb3 <- function(Beta, n=10, design){
+  SD <-  results3(s2,B=Beta, nreps=n, "sub", F, design) #substitutive, deterministic
+  SR <-  results3(s2, B=Beta, nreps=n, "sub", T, design) #substitutive, random
+  AD <-  results3(s2, B=Beta, nreps=n, "add", F, design) #additive, deterministic
+  AR <-  results3(s2, B=Beta, nreps=n, "add", T, design) #additive, random
+  response <- rbind(SD$responses, SR$responses, AD$responses, AR$responses)
+  response.summary <- rbind(SD$response.summary, SR$response.summary, AD$response.summary, AR$response.summary)
+  
+  return(list(responses=response, response.summary=response.summary))
+}
+resnormal2 <- fb3(B, 10, design.392)
+
+#treatment results
+results.orig2 <- resnormal2[[1]] %>% 
+  mutate("comp"=Rename(c(1, .3, .2, .1, 0, 0), c(1:6), species)) %>%
+  mutate("comp_Abund"=comp*n) %>% 
+  filter(time==max(time)) %>%
+  group_by(rep, dens, rand,rich) %>% 
+  summarise(N = n[species=="tot"],
+            pI=pI[species=="tot"],
+            n.I=n.I[species=="tot"],
+            comp_Abund=sum(comp_Abund, na.rm = T),
+            comp_Abund.N=sum(comp_Abund, na.rm = T)/N) 
+
+ggplot(results.orig2, aes(rich, pI, color=dens, shape=rand))+
+  geom_point()+
+  geom_line(aes(group=rep))+
+  #geom_smooth(method = "lm", formula = y ~poly(x,3), color="black", lwd=.5)+
+  facet_wrap(~rand+dens)+
+  labs(color="density", shape="stochastic?", y="proportion infected", x="richness")
+
+#PI ~ density and competency
+ggplot(results.orig2, aes(N, pI, color=comp_Abund.N))+
+  geom_point()
+
+#parameter surface
+# linear fit
+fit <- lm(pI ~ N*comp_Abund.N, data = results.orig2)
+fit1 <- lm(pI ~ N+comp_Abund.N, data = results.orig2)
+fit2 <- lm(pI ~ poly(comp_Abund.N, 3) + N, data = results.orig2)
+fit3 <- lm(pI ~ poly(comp_Abund.N, 3) + poly(N,2), data = results.orig2)
+fit4 <- lm(pI ~ poly(comp_Abund.N, 2) * poly(N,2), data = results.orig2)
+fit5 <- lm(pI ~ poly(comp_Abund.N, 3) * poly(N,2), data = results.orig2)
+fit6 <- lm(pI ~ poly(comp_Abund.N, 2) * poly(N,3), data = results.orig2)
+fit7 <- lm(pI ~ poly(comp_Abund.N, 3) * poly(N,3), data = results.orig2)
+AIC(fit, fit1, fit2, fit3, fit4, fit5, fit6, fit7)
+
+anova(fit7, fit5) 
+anova(fit3, fit5) 
+#fit5 is the best. lowest AIC. fit7 is what I used when I added those extra treatments, which is not significantly different from fit5.
 
 # predict on x-y grid, for surface
-N.pred <- seq(min(results$N), max(results$N), length.out = 30 )
-comp.pred <- seq(min(results$comp_Abund.N), max(results$comp_Abund.N), length.out = 30 )
-xy <- expand.grid(N = N.pred, comp_Abund.N = comp.pred)
+parplot(results.orig2, fit5)
 
-pI.pred <- matrix (nrow = 30, ncol = 30, 
-                    data = predict(fit5, newdata = data.frame(xy), interval = "prediction"))
+#check assumptions of normal and homo.var resids
+hist(resid(fit5))
+plot(resid(fit5))
+plot(fitted(fit5) ~ results.orig2$pI) + abline(0,1)
+
+#how does diversity affect %infected of species1?
+res.sum <- resnormal2[[2]]
+head(res.sum)
+test <- res.sum %>% filter(rand=="FALSE") %>%  group_by(rep, dens, rich) %>%  summarise(nI.1 = n.I[species==1], pI.1 = pI[species==1], N = n[species=="tot"])
+ggplot(test, aes(rich, pI.1, color=dens, group=rep))+
+  geom_point() +
+  geom_line() +
+  facet_wrap(~dens)+
+  ylim(0,1)
+ggplot(test, aes(rich, nI.1, group=rep))+
+  geom_point() +
+  geom_line()+
+  facet_wrap(~dens)
+head(res.sum)
+
+test2 <- res.sum %>%  group_by(rep, dens, rand, rich) %>%  
+  summarise(n.1 = ifelse(any(species==1), n[species==1], NA),
+            nI.1 = ifelse(any(species==1), n.I[species==1], NA),
+            nE.1 = ifelse(any(species==1), n.E[species==1], NA),
+            pI.1 = ifelse(any(species==1), pI[species==1], NA),
+            N = n[species=="tot"]) %>% 
+  right_join(results.orig2)
+head(test2)
+ggplot(filter(test2, rand==F) , aes(rich, pI.1, group=rep, color=nE.1))+
+  geom_point() +
+  geom_line()+
+  facet_wrap(~dens)
+ggplot(filter(test2) , aes(rich, pI.1, group=rep))+
+  geom_point() +
+  geom_line()+
+  facet_wrap(~dens+rand)
+ggplot(filter(test2) , aes(comp_Abund.N, pI.1, group=rep, color=N))+
+  geom_point() 
+ggplot(filter(test2) , aes(N, comp_Abund, group=rep, color=pI.1))+
+  geom_point() 
+ggplot(filter(test2), aes(n.1, n.I, color=N))+
+  geom_point(cex=2)
+
+####
+dat=results
+#maybe # infected is better than percent infected.
+ggplot(filter(dat, is.na(densN)), aes(rich, n.I,  shape=rand))+
+  geom_point(cex=2)+
+  geom_line(aes(group=rep))+
+  facet_wrap(~dens+rand)+
+  theme(strip.background = element_rect(color="black", fill="white"))
+ggplot(filter(dat, is.na(densN)), aes(rich, comp_Abund,  shape=rand))+
+  geom_point(cex=2)+
+  geom_line(aes(group=rep))+
+  facet_wrap(~dens+rand)+
+  theme(strip.background = element_rect(color="black", fill="white"))
+ggplot(filter(dat, is.na(densN)), aes(comp_Abund, n.I))+
+  geom_point(cex=2)+
+  geom_smooth(method = 'lm', formula = y ~ poly(x, 3))+
+  labs(x="community competence", y="# infected", color="")
+
+ggplot(filter(dat), aes(N, n.I, color=comp_Abund))+
+  geom_point(cex=2)
+
+m0 <- lm(n.I ~1, data = filter(dat, is.na(densN)))
+m1 <- lm(n.I ~comp_Abund, data = filter(dat, is.na(densN)))
+m2 <- lm(n.I ~poly(comp_Abund,2), data = filter(dat, is.na(densN)))
+m3 <- lm(n.I ~poly(comp_Abund,3), data = filter(dat, is.na(densN)))
+AIC(m0, m1, m2, m3)
+anova(m0, m3)
+plot(resid(m3)~fitted(m3))
+hist(resid(m3))
+summary(m3)
+#3d plot
+
+
+#parameter surface
+# linear fit. go with fit7
+fit <- lm(n.I ~ N*comp_Abund, data = dat)
+fit0 <- lm(n.I ~ N, data = dat)
+fit00 <- lm(n.I ~ comp_Abund, data = dat)
+fit1 <- lm(n.I ~ N+comp_Abund, data = dat)
+AIC(fit, fit0, fit00, fit1)
+anova(fit, fit1)
+
+fit2 <- lm(n.I ~ poly(comp_Abund, 3) + N, data = dat)
+fit3 <- lm(n.I ~ poly(comp_Abund, 3) + poly(N,2), data = dat)
+fit4 <- lm(n.I ~ poly(comp_Abund, 2) * poly(N,2), data = dat)
+fit5 <- lm(n.I ~ poly(comp_Abund, 3) * poly(N,2), data = dat)
+fit6 <- lm(n.I ~ poly(comp_Abund, 2) * poly(N,3), data = dat)
+fit7 <- lm(n.I ~ poly(comp_Abund, 3) * poly(N,3), data = dat)
+fit8 <- lm(n.I ~ poly(comp_Abund, 3), data = dat)
+AIC(fit, fit1, fit2, fit3, fit4, fit5, fit6, fit7, fit8)
+summary(fit5)
+anova(fit5, fit8) #the addition of density helps
+
+#new data to predict
+N.pred <- seq(min(dat$N), max(dat$N), length.out = 30 )
+comp.pred <- seq(min(dat$comp_Abund), max(dat$comp_Abund), length.out = 30 )
+xy <- expand.grid(N = N.pred, comp_Abund = comp.pred)
+
+nI.pred <- matrix (nrow = 30, ncol = 30, 
+                   data = predict(fit7, newdata = data.frame(xy), interval = "prediction"))
 
 # predicted z-values, fitted points for droplines to surface
-fitpoints <- predict(fit5) 
-
-scatter3D(z = results$pI, x = results$N, y = results$comp_Abund.N,
+fitpoints <- predict(fit7) 
+v=viridis(100, direction=1)
+#dat2 <- arrange(dat, N)
+dat$shape <- ifelse(dat$dens=="add" & dat$rand==F, 21,20)
+dat$cex <- ifelse(dat$dens=="add" & dat$rand==F, 1.1,1)
+#plot
+scatter3D(z = dat$n.I, x = dat$N, y=dat$comp_Abund,
           theta = 20, phi = 20, ticktype = "detailed",
-          pch=16, cex=.8, col = viridis(12, direction=1),
-          xlab = "N", ylab = "comp_Abund.N", zlab = "pI", clab = "pI", 
-          surf = list(x = N.pred, y = comp.pred, z = pI.pred, 
+          pch=dat$shape, cex=dat$cex, col=v,
+          xlab = "# individuals", ylab = "Community competency", zlab = "# infected", clab = "# infected", 
+          surf = list(x = N.pred, y = comp.pred, z = nI.pred, 
                       facets = NA, alpha=.7, fit = fitpoints),
-          colkey = list(length = 0.8, width = 0.4),            
-          main = "Proportion infected")
+          colkey = list(length = 0.8, width = 0.4))
+scatter3D(z = dat$n.I, x = dat$N, y=dat$comp_Abund,
+          theta = 20, phi = 20, ticktype = "detailed",
+          pch=dat$shape, cex=dat$cex, col=v,
+          xlab = "# individuals", ylab = "Community competency", zlab = "# infected", clab = "# infected", 
+          colkey = list(length = 0.8, width = 0.4))
 
 
-# TRY: 
-# require(plot3Drgl)
-# plotrlg()
-  
-  
-  
-  
-  
+
