@@ -1,85 +1,77 @@
----
-title: "all_sim_functions2"
-author: "Lisa Rosenthal"
-date: "12/9/2018"
-output: html_document
----
+#functions for mesocosm simulation 
 
-```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = '/Users/lisarosenthal/Desktop/mesocosm expt/mesocosm.git')
-knitr::opts_chunk$set(echo = TRUE)
-```
 #libraries
-```{r}
-library(raster)
-library(dplyr)
-library(ggplot2)
-library(reshape2)
-library(viridis)
-```
+require(raster)
+require(dplyr)
+require(ggplot2)
+require(reshape2)
+require(viridis)
 
+###################################
+###################################
 #load dat
-```{r}
+
 #load betas(sort of ~transition rates), design df
 #see "oldcode_transitionprobs.R" and "species_distribution.R" for how I got the data below.
 #B <- read.csv("simulation/outputs/betas.csv")
 B <- read.csv("simulation/outputs/rates.csv")
 design <- read.csv("simulation/outputs/design.csv")
 design[2,2] <- 2.29 #for some reason R sucks and hates 2.28. changing it slightly.
-```
+#default planting distances (cm)
+D.add <- rev(c(1.75, 1.9, 2.28, 3))
+D.sub <- 2
 
+###################################
+###################################
 #Data managment
-```{r}
-Rename <-  
-  function(values_to, index_from, from_column){
-  result <- (values_to[match(from_column, index_from)])
-  return(result)
+
+Rename <- function(values_to, index_from, from_column){
+    result <- (values_to[match(from_column, index_from)])
+    return(result)
   }
 
 multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
   library(grid)
-
+  
   # Make a list from the ... arguments and plotlist
   plots <- c(list(...), plotlist)
-
+  
   numPlots = length(plots)
-
+  
   # If layout is NULL, then use 'cols' to determine layout
   if (is.null(layout)) {
     # Make the panel
     # ncol: Number of columns of plots
     # nrow: Number of rows needed, calculated from # of cols
     layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
-                    ncol = cols, nrow = ceiling(numPlots/cols))
+                     ncol = cols, nrow = ceiling(numPlots/cols))
   }
-
- if (numPlots==1) {
+  
+  if (numPlots==1) {
     print(plots[[1]])
-
+    
   } else {
     # Set up the page
     grid.newpage()
     pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
-
+    
     # Make each plot, in the correct location
     for (i in 1:numPlots) {
       # Get the i,j matrix positions of the regions that contain this subplot
       matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
-
+      
       print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
                                       layout.pos.col = matchidx$col))
     }
   }
 }
 
-```
-
+###################################
+###################################
 #species abundances
-```{r}
+
 #getting abundances for all 4 treatments: sub/det, sub/rand, add/det, add/rand
-#default planting distances (cm)
-D.add <- rev(c(1.75, 1.9, 2.28, 3))
-D.sub <- 2
+
 getabund4 <- function(dist, rand=F, mu=1){
   #load function
   getabund <- function(r, n, mu){ 
@@ -106,7 +98,7 @@ getabund4 <- function(dist, rand=F, mu=1){
   }
   )
   tmp <- do.call("rbind.data.frame", tmp)
-
+  
   #setup randomization option
   sp <- unique(tmp$A)
   if (rand==T) {
@@ -119,10 +111,10 @@ getabund4 <- function(dist, rand=F, mu=1){
   tmp
 }
 
-```
-
+###################################
+###################################
 #simulation
-```{r}
+
 #make function to get host values and matrix of infection probabilities
 format.comp2 <- function(rich, beta, distances, plants=abund$R2, steps=20){
   plants=plants %>% as.character() %>% as.numeric()
@@ -142,7 +134,7 @@ format.comp2 <- function(rich, beta, distances, plants=abund$R2, steps=20){
   betaS <- beta %>% 
     filter(dist==distances[rich]) %>% 
     filter(trans=="sec") 
- 
+  
   valP <- lapply(1:steps, function(x) Rename(betaP[betaP$time==x,]$beta, betaP[betaP$time==x,]$species, from_column = s[,x]))
   h.P <- matrix(unlist(valP), ncol = length(valP), byrow = F)
   valS <- lapply(1:steps, function(x) Rename(betaS[betaS$time==x,]$beta, betaS[betaS$time==x,]$species, from_column = s[,x]))
@@ -168,7 +160,7 @@ HPraster2 <- function(design, density, rich, h, n=10){
   #rich=richness level (1-4)
   #h=output from format.comp()
   #n=number of inoculated plants
-
+  
   
   host <- path <- raster(ncol=ncol, nrow=nrow, crs="+proj=utm +zone=1 +datum=WGS84", xmn=0, xmx=ncol, ymn=0, ymx=nrow) #create a raster layer for the host and pathogen
   
@@ -178,7 +170,7 @@ HPraster2 <- function(design, density, rich, h, n=10){
   #inoculate with pathogen
   values(path) <- 0
   values(path) <- sample(c(rep(1, n), rep(0, ncell(path)-n)), replace = F)
-
+  
   return(list("path"=path, "host"=host))
 }
 
@@ -197,7 +189,7 @@ simulate2 <- function(h, HP, steps) {
   v <- matrix(0, ncell(path), steps)
   v[,1] <- values(path) #values of infection status
   a <- adjacent(host, 1:ncell(host), 4, sorted=TRUE)
-
+  
   #setting up objects that will be reported
   betaP <- h$betaP
   betaS <- h$betaS
@@ -232,7 +224,7 @@ simulate2 <- function(h, HP, steps) {
         PK2[i, time] <- betaS[i, time-t.exposed[i, 2]+1] 
         PK3[i, time] <- betaS[i, time-t.exposed[i, 3]+1] 
         PK4[i, time] <- betaS[i, time-t.exposed[i, 4]+1] 
-
+        
         #function for defining susceptible becoming infected  
         f <- function(p, h) {
           if(is.na(h)) { #give NA values 0
@@ -253,7 +245,7 @@ simulate2 <- function(h, HP, steps) {
       } 
     }
   }
-
+  
   list("values"=v, "betaS"=PK, "t.exposed"=t.exposed)
 }
 
@@ -264,7 +256,7 @@ animate <- function(HP, v, pause=0.1, col=pal) {
   p <- HP$path
   #pal <- viridis::viridis(6,end = .95, direction = -1)
   pal<-(RColorBrewer::brewer.pal(6, "Spectral")) 
-    
+  
   which.color <- unique(values(h)) %>% sort()
   for (i in 1:ncol(v)) { #for every time step
     values(p) <- v[,i] #assign the values of matrix v to raster p at each time step
@@ -277,115 +269,115 @@ animate <- function(HP, v, pause=0.1, col=pal) {
 
 #getting response variables out
 response <- function(sim, HP){
-
-#data=output from simulate; HP=output from HPraster
+  
+  #data=output from simulate; HP=output from HPraster
   data <- sim
-#get data
-dat <- data[[1]] #state of each cell by time: N x time
-spp <- as.vector(values(HP$host)) #vector of species present in correct
-
-#get table of frequency of each species 
-fr <- as.data.frame(table(spp))
-N <- cbind.data.frame("tot", as.numeric(sum(fr$Freq)))
-names(N) <- names(fr) <- c("species", "n")
-fr <- rbind(fr, N)
-
-############################################################
-#make tables of infecteds
-############################################################
-#for each time step, get sum of infecteds and cbind onto existing f dataframe
-sp <- fr$species[1:length(fr$species)-1]
-I <- (dat * spp)
-frI <- fr
-for(t in 1:ncol(I)){
-  tmp <- sapply(sp, function(i) {
-    sum(I[,t]==sp[i])
-  })
-  tmp[length(tmp)+1] <- sum(tmp)
-  frI <- cbind(frI, tmp)
-}
-names(frI) <- c(names(fr), 1:ncol(I))
-
-############################################################
-#make tables of exposed
-############################################################
-#for each time step, get sum of exposed and cbind onto existing f dataframe
-
-#find time infected for every cell
-t.inf <- sapply(1:nrow(dat), function(i) which(dat[i, ]==1)[1])
-
-#table of exposure
-exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=data$t.exposed, exp.f=t.inf-1)
-#collapse table into 3 columns: cell, exp.i, exp.f
-e.i <- apply(exposure[,2:5], 1, function(x) {min(x, na.rm = T)})
-e.i[is.infinite(e.i)] <- NA
-exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=e.i, exp.f=t.inf-1)
-
-#$exp.f==NA when never infected. $exp.i==NA when never exposed. NA's introduced when 1. never exposed, 2. inoculated, 3. exposed, but not infected
-#1. never exposed
-S <- is.na(exposure$exp.i) & is.na(exposure$exp.f)
-#2. inoculated
-I <- is.na(exposure$exp.i) & exposure$exp.f==0
-#3. exposed, never infected
-E <- exposure$exp.i>0 & is.na(exposure$exp.f)
-#change values
-exposure$exp.i[which(S)] <- 0
-exposure$exp.i[which(I)] <- 0
-exposure$exp.f[which(S)] <- 0
-exposure$exp.f[which(I)] <- 0
-exposure$exp.f[which(E)] <- ncol(dat)
-
-for(i in 1:nrow(dat)){
-  #change these values to NA, corresponding to time exposed
-  dat[i, exposure$exp.i[i]:exposure$exp.f[i]] <- NA 
-}
-
-#make matrix for just exposed plants
-e <- dat
-e[!is.na(e)] <- 0
-e[is.na(e)] <- 1
-
-#get frequencies of exposed plants
-E <- e * spp
-
-frE <- fr
-for(t in 1:ncol(E)){
-  tmp <- sapply(sp, function(i) {
-    sum(E[,t]==sp[i])
-  })
-  tmp[length(tmp)+1] <- sum(tmp)
-  frE <- cbind(frE, E=tmp)
-}
-names(frE) <- c(names(fr), 1:ncol(E))
-
-
-############################################################
-#make table tall
-############################################################
-frI2 <- melt(frI, c("species", "n"), 3:ncol(frI), variable.name = "time", value.name = "n.I")
-frE2 <- melt(frE, c("species", "n"), 3:ncol(frE), variable.name = "time", value.name = "n.E")
-fr2 <- left_join(frI2, frE2, by=c("species", "time", "n")) %>% arrange( species) 
-
-############################################################
-#get n.S and %inf
-############################################################
-fr2$n.S <- fr2$n-fr2$n.I
-fr2$pI <- fr2$n.I/fr2$n
-
-############################################################
-#get dI/dt
-############################################################
-#dI/dt = I[t+1]-I[t]
-di <- function(t) fr2[t,]$n.I-fr2[t-1,]$n.I
-fr2$dI <- c(NA, di(2:length(fr2$n.I))) 
-
-#change all dI where time=1 to NA
-fr2$dI[fr2$time==1] <- NA
-
-#time needs to be numerical
-fr2$time <- as.numeric(fr2$time)
-
-return((fr2))
+  #get data
+  dat <- data[[1]] #state of each cell by time: N x time
+  spp <- as.vector(values(HP$host)) #vector of species present in correct
+  
+  #get table of frequency of each species 
+  fr <- as.data.frame(table(spp))
+  N <- cbind.data.frame("tot", as.numeric(sum(fr$Freq)))
+  names(N) <- names(fr) <- c("species", "n")
+  fr <- rbind(fr, N)
+  
+  ############################################################
+  #make tables of infecteds
+  ############################################################
+  #for each time step, get sum of infecteds and cbind onto existing f dataframe
+  sp <- fr$species[1:length(fr$species)-1]
+  I <- (dat * spp)
+  frI <- fr
+  for(t in 1:ncol(I)){
+    tmp <- sapply(sp, function(i) {
+      sum(I[,t]==sp[i])
+    })
+    tmp[length(tmp)+1] <- sum(tmp)
+    frI <- cbind(frI, tmp)
+  }
+  names(frI) <- c(names(fr), 1:ncol(I))
+  
+  ############################################################
+  #make tables of exposed
+  ############################################################
+  #for each time step, get sum of exposed and cbind onto existing f dataframe
+  
+  #find time infected for every cell
+  t.inf <- sapply(1:nrow(dat), function(i) which(dat[i, ]==1)[1])
+  
+  #table of exposure
+  exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=data$t.exposed, exp.f=t.inf-1)
+  #collapse table into 3 columns: cell, exp.i, exp.f
+  e.i <- apply(exposure[,2:5], 1, function(x) {min(x, na.rm = T)})
+  e.i[is.infinite(e.i)] <- NA
+  exposure <- data.frame(cell=1:length(data$t.exposed), exp.i=e.i, exp.f=t.inf-1)
+  
+  #$exp.f==NA when never infected. $exp.i==NA when never exposed. NA's introduced when 1. never exposed, 2. inoculated, 3. exposed, but not infected
+  #1. never exposed
+  S <- is.na(exposure$exp.i) & is.na(exposure$exp.f)
+  #2. inoculated
+  I <- is.na(exposure$exp.i) & exposure$exp.f==0
+  #3. exposed, never infected
+  E <- exposure$exp.i>0 & is.na(exposure$exp.f)
+  #change values
+  exposure$exp.i[which(S)] <- 0
+  exposure$exp.i[which(I)] <- 0
+  exposure$exp.f[which(S)] <- 0
+  exposure$exp.f[which(I)] <- 0
+  exposure$exp.f[which(E)] <- ncol(dat)
+  
+  for(i in 1:nrow(dat)){
+    #change these values to NA, corresponding to time exposed
+    dat[i, exposure$exp.i[i]:exposure$exp.f[i]] <- NA 
+  }
+  
+  #make matrix for just exposed plants
+  e <- dat
+  e[!is.na(e)] <- 0
+  e[is.na(e)] <- 1
+  
+  #get frequencies of exposed plants
+  E <- e * spp
+  
+  frE <- fr
+  for(t in 1:ncol(E)){
+    tmp <- sapply(sp, function(i) {
+      sum(E[,t]==sp[i])
+    })
+    tmp[length(tmp)+1] <- sum(tmp)
+    frE <- cbind(frE, E=tmp)
+  }
+  names(frE) <- c(names(fr), 1:ncol(E))
+  
+  
+  ############################################################
+  #make table tall
+  ############################################################
+  frI2 <- melt(frI, c("species", "n"), 3:ncol(frI), variable.name = "time", value.name = "n.I")
+  frE2 <- melt(frE, c("species", "n"), 3:ncol(frE), variable.name = "time", value.name = "n.E")
+  fr2 <- left_join(frI2, frE2, by=c("species", "time", "n")) %>% arrange( species) 
+  
+  ############################################################
+  #get n.S and %inf
+  ############################################################
+  fr2$n.S <- fr2$n-fr2$n.I
+  fr2$pI <- fr2$n.I/fr2$n
+  
+  ############################################################
+  #get dI/dt
+  ############################################################
+  #dI/dt = I[t+1]-I[t]
+  di <- function(t) fr2[t,]$n.I-fr2[t-1,]$n.I
+  fr2$dI <- c(NA, di(2:length(fr2$n.I))) 
+  
+  #change all dI where time=1 to NA
+  fr2$dI[fr2$time==1] <- NA
+  
+  #time needs to be numerical
+  fr2$time <- as.numeric(fr2$time)
+  
+  return((fr2))
 }
 #getting Force of infection
 FOI <- function(sim, HP){
@@ -439,7 +431,7 @@ FOI <- function(sim, HP){
 
 #summary of response variables
 response.sum <- function(resp, foi){
-
+  
   #n.species, n.infected, perc.infected for each species
   RV1 <- resp %>% 
     filter(time==max(time)) %>% 
@@ -467,11 +459,12 @@ prepdata <- function(dens, rand){
   A <- getabund4(D, rand, 1) 
   list(A=A, D=D, dens=dens, rand=rand)
 }
-```
 
-Getting results out for multiple replicates. Provided below are functions for the original experimental design, and one opened up to be more flexible for binding together different designs.
+###################################
+###################################
 
-```{r}
+#Getting results out for multiple replicates. Provided below are functions for the original experimental design, and one opened up to be more flexible for binding together different designs.
+
 #simulation function that packages together simulation functions and responses
 s2 <- function(Rich, A, beta, design, t=20){
   #Rich=richness level, a=abundance dataframe from `prepdata`; beta=transition probs(csv), design=experimental design (csv)
@@ -550,15 +543,9 @@ fb <- function(Beta, n=10){
 }
 
 #functions for binding different designs. see moretreatments.R for example
-prepdata2 <- function(dens, rand, design){
-  #dens="add" or "sub", rand=F or T
-  D <- design %>% filter(d==dens) %>% pull(r)#(planting distances)
-  A <- getabund4(D, rand, 1) 
-  list(A=A, D=D, dens=dens, rand=rand)
-}
 
 #simulation and results functions ("f.sim" below)
-results3 <- function(f.sim=s2, t=20, B, nreps=10, density="sub", Random=F, design){
+results3 <- function(f.sim=s2,B, nreps=10, density="sub", Random=F, design){
   #density="add" or "sub", Rand=T or F, f.sim=s2
   R <- c(1,2,4,6)
   
@@ -575,13 +562,13 @@ results3 <- function(f.sim=s2, t=20, B, nreps=10, density="sub", Random=F, desig
     tmp5 <- lapply(1:4, function(x) cbind(ident[x,], tmp4[[x]]))
     plyr::ldply(tmp5, data.frame)
   }
- 
+  
   #1. response
   bres <- list(NULL)
   bres2 <- list(NULL)
   for(i in 1:nreps){
     data <- prepdata2(density, Random, design)
-    res1 <- lapply(1:4, function(R) s2(R, data, B, design, t))
+    res1 <- lapply(1:4, function(R) s2(R, data, B, design))
     ident <- data.frame(rep=i, dens=density, rand=Random, rich=R)
     bres[[i]] <- bind.response(res1)
     bres2[[i]] <- bind.respsum(res1)
@@ -591,11 +578,11 @@ results3 <- function(f.sim=s2, t=20, B, nreps=10, density="sub", Random=F, desig
   
   return(list("responses"= bres, "response.summary"= bres2))
 }
-fb2 <- function(Beta, t=20, n=10, design){
-  SD <-  results3(s2, t, B=Beta, nreps=n, "sub", F, design) #substitutive, deterministic
-  SR <-  results3(s2, t, B=Beta, nreps=n, "sub", T, design) #substitutive, random
+fb2 <- function(Beta, n=10, design){
+  SD <-  results3(s2,B=Beta, nreps=n, "sub", F, design) #substitutive, deterministic
+  SR <-  results3(s2, B=Beta, nreps=n, "sub", T, design) #substitutive, random
   response <- rbind(SD$responses, SR$responses)
- 
+  
   return(response)
 }
 ```
