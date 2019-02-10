@@ -179,10 +179,10 @@ summary(m5)
 head(datslopes)
 unique(datslopes$trt)
 #incidence
-wilcox.test(datslopes$slopes.pI[datslopes$trt=="sub.FALSE"])#.002
-wilcox.test(datslopes$slopes.pI[datslopes$trt=="sub.TRUE"])#1
-wilcox.test(datslopes$slopes.pI[datslopes$trt=="add.FALSE"])#.002
-wilcox.test(datslopes$slopes.pI[datslopes$trt=="add.TRUE"])#.084
+wilcox.test(datslopes$slopes.pI[datslopes$trt=="sub.FALSE"], conf.int = T)#.002
+wilcox.test(datslopes$slopes.pI[datslopes$trt=="sub.TRUE"], conf.int = T)#1
+wilcox.test(datslopes$slopes.pI[datslopes$trt=="add.FALSE"], conf.int = T)#.002
+wilcox.test(datslopes$slopes.pI[datslopes$trt=="add.TRUE"], conf.int = T)#.084
 
 wilcox.test(datslopes$slopes.nI[datslopes$trt=="sub.FALSE"])#.002
 wilcox.test(datslopes$slopes.nI[datslopes$trt=="sub.TRUE"])#1

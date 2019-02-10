@@ -6,8 +6,7 @@ library(RColorBrewer)
 library(viridis)
 pal<-(RColorBrewer::brewer.pal(6, "Spectral")) 
 pal <- rev(pal)
-#pal <- viridis(6,end = .95)
-ggplot <- function(...) ggplot2::ggplot(...) + scale_fill_manual(values=pal) + scale_color_manual(values=pal) 
+
 
 #generating needed distributions for the mesocosm simulation
 
@@ -19,13 +18,25 @@ ggplot <- function(...) ggplot2::ggplot(...) + scale_fill_manual(values=pal) + s
 
 #you have 6 species. get proportion of individuals per species and standardize to a certain number of total individuals.
 
-getabund <- function(r, n, mu){ 
+getabund <- function(r, n){ 
   #r=richness, n=total individuals, mu=mean of log distribution
   
   #get counts of each species
   n1 = n+max(r) #buffering the number of species so there aren't errors due to rounding
-  pool=dlnorm(1:r, mu) #distribution of each species
-  abund <- pool[1:r]*n1/sum(pool[1:r]) #get abundances of each species for a richness level
+  
+  #get distribution of each species. comes from a log distribution (mu=6, sd=.4) and 6 species are pulled. replicated 1000 times and the mean values taken.
+  N <- 6
+  sims <- 1000
+  m2 <- matrix(NA, nrow = sims, ncol = N)
+  for(i in 1:sims){
+    y2 <- rlnorm(1:N, meanlog = 1, sdlog = .5) %>% 
+      sort(decreasing = T)
+    m2[i,] <- y2
+  }
+  pool <- apply(m2, 2, mean)/sum(apply(m2, 2, mean))
+  
+  #get abundances of each species for a richness level
+  abund <- pool[1:r]*n1/sum(pool[1:r])
   
   #get actual population from the counts above 
   r2=1:length(r)
@@ -35,27 +46,12 @@ getabund <- function(r, n, mu){
 }
 
 #adding in argument "rand" so I can specify if assembly is random
-getabund3 <- function(n=100, mu=1, rand=F) {
+getabund3 <- function(n=100, rand=F) {
   
   #load nested functions
-  getabund <- function(r, n, mu){ 
-    #r=richness, n=total individuals, mu=mean of log distribution
-    
-    #get counts of each species
-    n1 = n+max(r) #buffering the number of species so there aren't errors due to rounding
-    pool=dlnorm(1:r, mu) #distribution of each species
-    abund <- pool[1:r]*n1/sum(pool[1:r]) #get abundances of each species for a richness level
-    
-    #get actual population from the counts above 
-    r2=1:length(r)
-    pop <- rep(1:length(abund), abund)
-    pop <- sort(sample(pop, n)) #bring the population back down to desired n. had issues with rounding.
-    return(pop)
-  }
-  
-  getabund2 <- function(n, mu){
+  getabund2 <- function(n){
     x=c(1,2,4,6)
-    counts <- lapply(x, function(r) getabund(r, n, mu))
+    counts <- lapply(x, function(r) getabund(r, n))
     counts2 <- unlist(counts)
     counts2 <- as.data.frame(matrix(counts2, ncol=length(x))) 
     names(counts2) <- c("R1", "R2", "R4", "R6")
@@ -63,7 +59,7 @@ getabund3 <- function(n=100, mu=1, rand=F) {
   }
   
   #setup randomization option
-  A <- getabund2(n, mu)
+  A <- getabund2(n)
   sp <- unique(A$R6)
   if (rand==T) {
     randsp <- sample(sp, length(sp))
@@ -72,11 +68,11 @@ getabund3 <- function(n=100, mu=1, rand=F) {
     A
 }
 
-counts2 <- getabund3(200, 1, rand = T)  
-
+counts2 <- getabund3(200, rand = F)  
+counts2
 #pool comes from a lognormal distribution
-plot(1:6, dlnorm(1:6, 1), type='o')
-
+getabund(6, 200) %>% table %>% as.data.frame() %>% plot
+getabund(6, 200) %>% hist
 #################################
 #Abundances with additive treatment
 #################################
@@ -87,7 +83,7 @@ plot(design$sp, design$n, ylim=c(0, max(design$n)))
 abline(lm(design$n~design$sp))
 
 test <- sapply(c(1,2,4,6), function(i) {
-  A <- getabund(i, design$n[design$sp==i], 1)
+  A <- getabund(i, design$n[design$sp==i])
   R <- rep(i, length(A))
   cbind(R, A)
 }
@@ -98,23 +94,31 @@ ggplot(test, aes(A, group=R))+
   facet_grid(~R)
 
 #Saturating curve. define the curves based on the species abundances of the richest community. I'm using 392, a somewhat arbitrary number that seems fine for the most abundant community. don't want to plant too much more than that. 
-A <- getabund(6, 392, 1) %>% table()
+A <- getabund(6, 392) %>% table()
 R <- c(1,2,4,6)
 N <- sapply(R, function(i) sum(A[1:i]))
 tmp <- sapply(1:length(N), function(i) {
-  A <- getabund(R[i], N[i], mu = 1)
+  A <- getabund(R[i], N[i])
   R <- rep(i, length(A))
   cbind(R, A)
   })
 tmp <- do.call("rbind.data.frame", tmp)
+tmp$A <- as.factor(tmp$A)
+tmp$A <- factor(tmp$A, levels = rev(levels(tmp$A)))
+
 ggplot(tmp, aes(R, group=A, fill=as.factor(A)))+
+  scale_fill_manual(values = pal)+
   geom_bar()
+plot(c(1,2,4,6), N, type='o')
+plot(1:4, N, type='o')
 
 #redesigning. Probably the best I'll do.
-N # 122 220 333 392 = optimum number to keep constant species abundaces across treatments
-design <- tibble(r=c(1.75, 1.9, 2.28, 3), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1))
+N # 115 198 319 392 = optimum number to keep constant species abundaces across treatments
+#design <- tibble(r=c(1.75, 1.9, 2.28, 3), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1)) #previous design using the wrong log-dist
+design <- tibble(r=c(1.75, 1.92, 2.5, 3.1), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1)) 
+design
 tmp <- sapply(c(1,2,4,6), function(i) {
-  A <- getabund(i, design$n[design$sp==i], 1)
+  A <- getabund(i, design$n[design$sp==i])
   R <- rep(i, length(A))
   cbind(R, A)
 }
@@ -127,15 +131,27 @@ ggplot(tmp, aes(R, group=A, fill=A))+
   geom_bar()
 
 #getting abundances for all 4 treatments: sub/det, sub/rand, add/det, add/rand
-getabund4 <- function(dist, rand=F, mu=1){
+getabund4 <- function(dist, rand=F){
   #load function
-  getabund <- function(r, n, mu){ 
+  getabund <- function(r, n){ 
     #r=richness, n=total individuals, mu=mean of log distribution
     
     #get counts of each species
     n1 = n+max(r) #buffering the number of species so there aren't errors due to rounding
-    pool=dlnorm(1:r, mu) #distribution of each species
-    abund <- pool[1:r]*n1/sum(pool[1:r]) #get abundances of each species for a richness level
+    
+    #get distribution of each species. comes from a log distribution (mu=6, sd=.4) and 6 species are pulled. replicated 1000 times and the mean values taken.
+    N <- 6
+    sims <- 1000
+    m2 <- matrix(NA, nrow = sims, ncol = N)
+    for(i in 1:sims){
+      y2 <- rlnorm(1:N, meanlog = 1, sdlog = .5) %>% 
+        sort(decreasing = T)
+      m2[i,] <- y2
+    }
+    pool <- apply(m2, 2, mean)/sum(apply(m2, 2, mean))
+    
+    #get abundances of each species for a richness level
+    abund <- pool[1:r]*n1/sum(pool[1:r])
     
     #get actual population from the counts above 
     r2=1:length(r)
@@ -147,7 +163,7 @@ getabund4 <- function(dist, rand=F, mu=1){
   #design is based on dimensions of available propogation trays
   design <- tibble(r=dist, w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 1,2,4,6))
   tmp <- lapply(c(1,2,4,6), function(i) {
-    A <- getabund(i, design$n[design$sp==i], mu)
+    A <- getabund(i, design$n[design$sp==i])
     R <- rep(i, length(A))
     cbind(R, A)
   }
@@ -169,38 +185,26 @@ getabund4 <- function(dist, rand=F, mu=1){
 #treatments: sub/det, sub/rand, add/det, add/rand
 #interplant spacings (cm)
 #default distances
-D.add <- rev(c(1.75, 1.9, 2.28, 3))
-D.sub <- 2
+D.add <- rev(c(1.75, 1.92, 2.5, 3.1))
+#D.add <- rev(c(1.75, 1.9, 2.28, 3)) #old distances with the wrong log-dist
+D.sub <- 1.75
 
-A_D <- getabund4(D.add, F, 1)
-A_R <- getabund4(D.add, T, 1)
-S_D <- getabund4(D.sub, F, 1)
-S_R <- getabund4(D.sub, T, 1)
+A_D <- data.frame(getabund4(D.add, F), dens="additive", rand="deterministic")
+A_S <- data.frame(getabund4(D.add, T), dens="additive", rand="stochastic")
+S_D <- data.frame(getabund4(D.sub, F), dens="substitutive", rand="deterministic")
+S_S <- data.frame(getabund4(D.sub, T), dens="substitutive", rand="stochastic")
 
-p1 <- ggplot(A_D, aes(R, group=A, fill=A))+
+plotdesign <- rbind(A_D, A_S, S_D, S_S)
+
+ggplot(plotdesign, aes(R, group=A, fill=A))+
   geom_bar()+
-  labs(title="add, deterministic")+
   labs(fill="species", x="richness", y="# individuals")+
-  ylim(0, 400)
-p2 <- ggplot(A_R, aes(R, group=A, fill=A))+
-  geom_bar()+
-  labs(title="add, stochastic")+
-  labs(fill="species", x="richness", y="# individuals")+
-  ylim(0, 400)
-p3 <- ggplot(S_D, aes(R, group=A, fill=A))+
-  geom_bar()+
-  labs(title="sub, deterministic")+
-  labs(fill="species", x="richness", y="# individuals")+
-  ylim(0, 400)
-p4 <- ggplot(S_R, aes(R, group=A, fill=A))+
-  geom_bar()+
-  labs(title="sub, stochastic")+
-  labs(fill="species", x="richness", y="# individuals")+
-  ylim(0, 400)
-multiplot(p1, p2, p3, p4, cols=2)
+  scale_fill_manual(values=pal) +
+  theme(strip.background = element_rect(fill="white",color="black"))+
+  facet_wrap(~rand+dens)
 
 #exporting the dimensions of the experiment to csv
-design <- tibble(d=rep(c("add","sub"), each=4), r=c(1.75, 1.9, 2.28, 3, 2, 2, 2, 2), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1, 6, 4, 2, 1))
+design <- tibble(d=rep(c("add","sub"), each=4), r=c(1.75, 1.92, 2.5, 3.1, 1.75, 1.75, 1.75, 1.75), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1, 6, 4, 2, 1))
 design <- design %>% 
   group_by(d) %>% 
   arrange(sp, .by_group=T)
@@ -214,13 +218,13 @@ melt(counts2)
 counts3 <- melt(counts2)
 spp <- as.factor(counts3$value)
 spp <- factor(spp, levels = sort(levels(spp), T))
-ggplot(counts3, aes( Var2, group=spp, fill=spp)) +
+ggplot(counts3, aes( variable, group=spp, fill=spp)) +
   geom_bar()
 #plot distribution of richest community
 tmp <- counts3 %>% 
-  group_by(Var2) %>% 
+  group_by(variable) %>% 
   count(value) %>% 
-  filter(Var2=="R6")
+  filter(variable=="R6")
 plot(tmp$value, tmp$n)
 hist(counts2$R4)
 

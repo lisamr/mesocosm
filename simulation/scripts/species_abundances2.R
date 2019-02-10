@@ -33,10 +33,10 @@ y <- apply(m, 2, mean)
 lines(y, type='l')
 #Try replicating it with basic R functions. it's identical. The right thing to do
 N <- 6
-sims <- 1000
+sims <- 10000
 m2 <- matrix(NA, nrow = sims, ncol = N)
 for(i in 1:sims){
-  y2 <- rlnorm(1:N, meanlog = 1, sdlog = .3) %>% sort(decreasing = T)
+  y2 <- rlnorm(1:N, meanlog = 1, sdlog = .4) %>% sort(decreasing = T)
   m2[i,] <- y2
 }
 y2 <- apply(m2, 2, mean)/sum(apply(m2, 2, mean))
