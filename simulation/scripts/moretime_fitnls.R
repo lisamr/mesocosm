@@ -2,13 +2,12 @@
 library(emmeans)
 
 design2 <- read.csv("simulation/outputs/design2.csv")
-design2$r[design2$r==2.28] <- 2.29 #for some reason R sucks and hates 2.28. changing it slightly.
+design2$r[design2$r==2.39] <- 2.4 #for some reason R sucks and hates 2.39. changing it slightly.
 
 design.128 <- design2 %>% filter(d=="add"| d=="sub" & n==128)
-design.210 <- design2 %>% filter(d=="add"| d=="sub" & n==210)
+design.210 <- design2 %>% filter(d=="add"| d=="sub" & n==200)
 design.338 <- design2 %>% filter(d=="add"| d=="sub" & n==338)
 design.392 <- design2 %>% filter(d=="add"| d=="sub" & n==392)
-
 
 #when does disease stop spreading in the additive-deterministic treatment? Run for 40 time steps and get results
 test <- results3(f.sim = s2,t = 40, B = B, nreps = 10, density = "add", Random = F, design = design.392)
@@ -21,37 +20,37 @@ ggplot(filter(testr, species=="tot"), aes(time, pI))+
   geom_line(aes(group=interaction(rich, rep)))+
   geom_smooth(aes(group=rich))
 
-moretime <- fb3(Beta = B, t = 40, n = 10, design = design.392)
+moretime <- fb3(Beta = B, t = 30, n = 10, design = design.392)
 moretimer <- moretime$responses 
+moretimer.sum <- moretime$response.summary
 #write.csv(moretimer, "simulation/outputs/moretime_responses.csv", row.names = F)
+#write.csv(moretimer.sum, "simulation/outputs/moretime_response_summary.csv", row.names = F)
 
 ggplot(filter(moretimer, species=="tot"), aes(time, pI))+
   #geom_point()+
   #geom_line(aes(group=interaction(rich, rep)))+
   geom_smooth(aes(group=rich,  color=as.factor(rich)))+
   facet_wrap(~dens+rand)
-ggplot(filter(moretimer, species=="tot", time==40), aes(rich, (pI)))+
+ggplot(filter(moretimer, species=="tot", time==30), aes(rich, (pI)))+
   geom_point()+
   geom_line(aes(group=interaction( rep)))+
-  geom_smooth(method='lm')+
-  facet_wrap(~dens+rand)
-ggplot(filter(moretimer, species=="tot", time==40), aes((rich), log(pI)))+
-  geom_point()+
-  geom_line(aes(group=interaction( rep)))+
-  geom_smooth(method='lm')+
-  facet_wrap(~dens+rand)
+  #geom_smooth(method='lm')+
+  facet_wrap(~rand+dens)+
+  background_grid(major = "xy", minor = "none")+
+  labs(x="richness", y="proportion infected")+
+  theme(strip.background = element_rect(fill="white",color="black"))
 
 #another way to look at the interactions of density and assembly order
-ggplot(filter(moretimer, species=="tot", time==40), aes(rich, (pI), color=interaction(rand, dens), group=interaction(rand, dens)))+
+ggplot(filter(moretimer, species=="tot", time==30), aes(rich, (pI), color=interaction(rand, dens), group=interaction(rand, dens)))+
   geom_point()+
   geom_smooth(method='lm')
-ggplot(filter(moretimer, species=="tot", time==40), aes(rich, (n.I), color=interaction(rand, dens), group=interaction(rand, dens)))+
+ggplot(filter(moretimer, species=="tot", time==30), aes(rich, (n.I), color=interaction(rand, dens), group=interaction(rand, dens)))+
   geom_point()+
   #geom_line(aes(group=interaction(rand, dens, rep)))+
   geom_smooth(method='lm')
 
 #try fitting the data to a linear function and then try non-linear. look over old notes from ABG250.
-d <- filter(moretimer, species=="tot", time==40)
+d <- filter(moretimer, species=="tot", time==30)
 m1 <- lm(pI ~ rich, data=d)
 m2 <- lm(pI ~ -1+ (dens*rand)/rich, data=d)
 m3 <- lm(pI ~ -1+ (dens+rand)*rich, data=d)

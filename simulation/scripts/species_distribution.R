@@ -115,7 +115,7 @@ plot(1:4, N, type='o')
 #redesigning. Probably the best I'll do.
 N # 115 198 319 392 = optimum number to keep constant species abundaces across treatments
 #design <- tibble(r=c(1.75, 1.9, 2.28, 3), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1)) #previous design using the wrong log-dist
-design <- tibble(r=c(1.75, 1.92, 2.5, 3.1), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1)) 
+design <- tibble(r=c(1.75, 1.92, 2.39, 3), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1)) 
 design
 tmp <- sapply(c(1,2,4,6), function(i) {
   A <- getabund(i, design$n[design$sp==i])
@@ -185,7 +185,7 @@ getabund4 <- function(dist, rand=F){
 #treatments: sub/det, sub/rand, add/det, add/rand
 #interplant spacings (cm)
 #default distances
-D.add <- rev(c(1.75, 1.92, 2.5, 3.1))
+D.add <- rev(c(1.75, 1.92, 2.39, 3))
 #D.add <- rev(c(1.75, 1.9, 2.28, 3)) #old distances with the wrong log-dist
 D.sub <- 1.75
 
@@ -200,11 +200,11 @@ ggplot(plotdesign, aes(R, group=A, fill=A))+
   geom_bar()+
   labs(fill="species", x="richness", y="# individuals")+
   scale_fill_manual(values=pal) +
-  theme(strip.background = element_rect(fill="white",color="black"))+
+  background_grid(major = "xy", minor = "none") +
   facet_wrap(~rand+dens)
 
 #exporting the dimensions of the experiment to csv
-design <- tibble(d=rep(c("add","sub"), each=4), r=c(1.75, 1.92, 2.5, 3.1, 1.75, 1.75, 1.75, 1.75), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1, 6, 4, 2, 1))
+design <- tibble(d=rep(c("add","sub"), each=4), r=c(1.75, 1.92, 2.39, 3, 1.75, 1.75, 1.75, 1.75), w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 6, 4, 2, 1, 6, 4, 2, 1))
 design <- design %>% 
   group_by(d) %>% 
   arrange(sp, .by_group=T)

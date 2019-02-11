@@ -16,6 +16,7 @@ library(dplyr)
 library(ggplot2)
 library(reshape2)
 library(viridis)
+library(cowplot)
 ```
 
 #load dat
@@ -25,13 +26,13 @@ library(viridis)
 #B <- read.csv("simulation/outputs/betas.csv")
 B <- read.csv("simulation/outputs/rates.csv")
 design <- read.csv("simulation/outputs/design.csv")
-design[2,2] <- 2.29 #for some reason R sucks and hates 2.28. changing it slightly.
+design[2,2] <- 2.4 #for some reason R sucks and hates 2.39. changing it slightly.
+dat <- read.csv("simulation/outputs/moretime_responses.csv")#substitutve has 392 individuals and is run for 30 time steps. See 'moretime_fitnls.R' for code
 ```
 
 #Data managment
 ```{r}
-Rename <-  
-  function(values_to, index_from, from_column){
+Rename <-  function(values_to, index_from, from_column){
   result <- (values_to[match(from_column, index_from)])
   return(result)
   }
@@ -80,15 +81,27 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 #default planting distances (cm)
 D.add <- rev(c(1.75, 1.9, 2.28, 3))
 D.sub <- 2
-getabund4 <- function(dist, rand=F, mu=1){
+getabund4 <- function(dist, rand=F){
   #load function
-  getabund <- function(r, n, mu){ 
-    #r=richness, n=total individuals, mu=mean of log distribution
+  getabund <- function(r, n){ 
+    #r=richness, n=total individuals
     
     #get counts of each species
     n1 = n+max(r) #buffering the number of species so there aren't errors due to rounding
-    pool=dlnorm(1:r, mu) #distribution of each species
-    abund <- pool[1:r]*n1/sum(pool[1:r]) #get abundances of each species for a richness level
+    
+    #get distribution of each species. comes from a log distribution (mu=6, sd=.4) and 6 species are pulled. replicated 1000 times and the mean values taken.
+    N <- 6
+    sims <- 1000
+    m2 <- matrix(NA, nrow = sims, ncol = N)
+    for(i in 1:sims){
+      y2 <- rlnorm(1:N, meanlog = 1, sdlog = .5) %>% 
+        sort(decreasing = T)
+      m2[i,] <- y2
+    }
+    pool <- apply(m2, 2, mean)/sum(apply(m2, 2, mean))
+    
+    #get abundances of each species for a richness level
+    abund <- pool[1:r]*n1/sum(pool[1:r])
     
     #get actual population from the counts above 
     r2=1:length(r)
@@ -100,7 +113,7 @@ getabund4 <- function(dist, rand=F, mu=1){
   #design is based on dimensions of available propogation trays
   design <- tibble(r=dist, w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 1,2,4,6))
   tmp <- lapply(c(1,2,4,6), function(i) {
-    A <- getabund(i, design$n[design$sp==i], mu)
+    A <- getabund(i, design$n[design$sp==i])
     R <- rep(i, length(A))
     cbind(R, A)
   }
@@ -464,7 +477,7 @@ response.sum <- function(resp, foi){
 prepdata <- function(dens, rand){
   #dens="add" or "sub", rand=F or T
   D <- design %>% filter(d==dens) %>% pull(r)#(planting distances)
-  A <- getabund4(D, rand, 1) 
+  A <- getabund4(D, rand) 
   list(A=A, D=D, dens=dens, rand=rand)
 }
 ```
@@ -553,7 +566,7 @@ fb <- function(Beta, n=10){
 prepdata2 <- function(dens, rand, design){
   #dens="add" or "sub", rand=F or T
   D <- design %>% filter(d==dens) %>% pull(r)#(planting distances)
-  A <- getabund4(D, rand, 1) 
+  A <- getabund4(D, rand) 
   list(A=A, D=D, dens=dens, rand=rand)
 }
 
@@ -597,6 +610,16 @@ fb2 <- function(Beta, t=20, n=10, design){
   response <- rbind(SD$responses, SR$responses)
  
   return(response)
+}
+fb3 <- function(Beta, t, n=10, design){
+  SD <-  results3(s2,t, B=Beta, nreps=n, "sub", F, design) #substitutive, deterministic
+  SR <-  results3(s2,t, B=Beta, nreps=n, "sub", T, design) #substitutive, random
+  AD <-  results3(s2,t, B=Beta, nreps=n, "add", F, design) #additive, deterministic
+  AR <-  results3(s2,t, B=Beta, nreps=n, "add", T, design) #additive, random
+  response <- rbind(SD$responses, SR$responses, AD$responses, AR$responses)
+  response.summary <- rbind(SD$response.summary, SR$response.summary, AD$response.summary, AR$response.summary)
+  
+  return(list(responses=response, response.summary=response.summary))
 }
 ```
 

@@ -33,8 +33,8 @@ ggplot(filter(dat, species=="tot", time==20), aes(rich, (pI)))+
   geom_point()+
   geom_line(aes(group=interaction( rep)))+
   facet_wrap(~dens+rand)
-#t=40
-ggplot(filter(dat, species=="tot", time==40), aes(rich, (pI)))+
+#t=30
+ggplot(filter(dat, species=="tot", time==30), aes(rich, (pI)))+
   geom_point()+
   geom_line(aes(group=interaction( rep)))+
   facet_wrap(~dens+rand)
@@ -43,22 +43,22 @@ ggplot(filter(dat, species=="tot", time==40), aes(rich, (pI)))+
 Maybe the simplest way would be do do ANCOVA and compare the slopes between groups? I attempt to do it using the first model we talked about yesterday, but then I couldn't figure out how to get compare slopes. So I tried it with m2 below. 
 
 ```{r, warning=F}
-dat40 <- dat %>% 
-  filter(time==40, species=="tot") %>%  #look at total infections at time final
+dat30 <- dat %>% 
+  filter(time==30, species=="tot") %>%  #look at total infections at time final
   mutate(trt = interaction(dens, rand),
          rep2 = interaction(trt, rep), #rep ID in each trt group
          rep3 = case_when(rand==F~"det", T~as.character(rep2))) #assigning repID the same for all deterministic treatments since the species order is always the same.
 
 #look at data
-ggplot(dat40, aes(rich, (pI), color=interaction(rand, dens), group=interaction(rand, dens)))+
+ggplot(dat30, aes(rich, (pI), color=interaction(rand, dens), group=interaction(rand, dens)))+
   geom_point()+
   geom_smooth(method='glm', method.args=list(family='binomial'))
 
 #model from meeting. I care about the slopes. I use lstrends to pull that out with m2. if there's a way that's less black-boxy, I'm interested.
-m1 <- glm(cbind(n.I, n.S) ~ dens*rand*rich, data = dat40, family = binomial)
+m1 <- glm(cbind(n.I, n.S) ~ dens*rand*rich, data = dat30, family = binomial)
 #summary(m1)
 
-m2 <- glm(cbind(n.I, n.S) ~ trt*rich, data = dat40, family = binomial)
+m2 <- glm(cbind(n.I, n.S) ~ trt*rich, data = dat30, family = binomial)
 #summary(m2)
 #summary(m2)
 lst <- emmeans::lstrends(m2, "trt", var="rich") #get estimates of how treatment covaries with richness 
@@ -77,10 +77,10 @@ For example: `y ~ (trt+rep2)*rich` or `y ~ trt*rich + rep2`? There are issues wi
 
 ```{r}
 #not all of the individuals are estimated. that ok?
-m2.1 <- glm(cbind(n.I, n.S) ~ (trt+rep2)*rich, data = dat40, family = binomial) #slope varies with each block.
-m2.2 <- glm(cbind(n.I, n.S) ~ trt*rich + rep2, data = dat40, family = binomial) #just intercept varies with each block.
-m2.3 <- glm(cbind(n.I, n.S) ~ trt*rich + rep3, data = dat40, family = binomial) #rep3 assigns all of the deterministic blocks as the same.
-m2.4 <- glm(cbind(n.I, n.S) ~ (trt+rep3)*rich, data = dat40, family = binomial)
+m2.1 <- glm(cbind(n.I, n.S) ~ (trt+rep2)*rich, data = dat30, family = binomial) #slope varies with each block.
+m2.2 <- glm(cbind(n.I, n.S) ~ trt*rich + rep2, data = dat30, family = binomial) #just intercept varies with each block.
+m2.3 <- glm(cbind(n.I, n.S) ~ trt*rich + rep3, data = dat30, family = binomial) #rep3 assigns all of the deterministic blocks as the same.
+m2.4 <- glm(cbind(n.I, n.S) ~ (trt+rep3)*rich, data = dat30, family = binomial)
 
 #look at the model
 model=m2.3
@@ -93,8 +93,8 @@ hist(resid(model))
 
 #plot predicted. seems like slope should vary with blocks?
 pred <- predict(model, type="response")
-dat40$pred <- pred
-ggplot(dat40, aes(rich, pI, group=rep2))+
+dat30$pred <- pred
+ggplot(dat30, aes(rich, pI, group=rep2))+
   geom_point()+
   geom_line()+
   geom_point(aes(rich, pred), color='blue')+
@@ -106,12 +106,12 @@ ggplot(dat40, aes(rich, pI, group=rep2))+
 I tried a similar thing for when I use total infections as the disease metric. I use a neg. binomial model and run into similar issues.
 
 ```{r}
-ggplot(dat40, aes(rich, (n.I), color=interaction(rand, dens), group=interaction(rand, dens)))+
+ggplot(dat30, aes(rich, (n.I), color=interaction(rand, dens), group=interaction(rand, dens)))+
   geom_point()+
   geom_smooth(method='lm')#+
   #facet_wrap(~dens+rand)
 
-m3 <- MASS::glm.nb(n.I ~ trt*rich, data=dat40)
+m3 <- MASS::glm.nb(n.I ~ trt*rich, data=dat30)
 #summary(m3)
 
 lst2 <- emmeans::lstrends(m3, "trt", var="rich") 
@@ -129,13 +129,15 @@ How about just a non-parametric test since the variance of the groups is differe
 #get slopes and se for each group
 #proportion infected
 require(nlme)
-m <- lmList(pI ~ rich | rep2, data=dat40)
+dat30 <- dat30 %>% mutate(rand=ifelse(rand==F, "deterministic", "stochastic"),
+                 dens=ifelse(dens=="sub", "substitutive", "additive"))
+m <- lmList(pI ~ rich | rep2, data=dat30)
 cm <- coefficients(m)
 slopes.pI <- data.frame(rep2 = row.names(cm), slopes.pI = cm[,2])
-dat40 <- left_join(dat40, slopes.pI)
-head(dat40)
+dat30 <- left_join(dat30, slopes.pI)
+head(dat30)
 
-datslopes <- dat40 %>% filter(!duplicated(rep2))
+datslopes <- dat30 %>% filter(!duplicated(rep2))
 
 ggplot(datslopes, aes(dens, slopes.pI, group=interaction(rand, dens), fill=rand))+
   geom_boxplot()+
@@ -149,11 +151,12 @@ ggplot(datslopes, aes(dens, slopes.pI, group=interaction(rand, dens), fill=rand)
   theme_bw()
 
 #total infected
-m <- lmList(n.I ~ rich | rep2, data=dat40)
+m <- lmList(n.I ~ rich | rep2, data=dat30)
 cm <- coefficients(m)
 slopes.nI <- data.frame(rep2 = row.names(cm), slopes.nI = cm[,2])
-dat40 <- left_join(dat40, slopes.nI)
-head(dat40)
+dat30 <- left_join(dat30, slopes.nI)
+head(dat30)
+datslopes <- dat30 %>% filter(!duplicated(rep2))
 
 ggplot(datslopes, aes(dens, slopes.nI, group=interaction(rand, dens), fill=rand))+
   geom_boxplot()+
@@ -180,12 +183,12 @@ head(datslopes)
 unique(datslopes$trt)
 #incidence
 wilcox.test(datslopes$slopes.pI[datslopes$trt=="sub.FALSE"], conf.int = T)#.002
-wilcox.test(datslopes$slopes.pI[datslopes$trt=="sub.TRUE"], conf.int = T)#1
+wilcox.test(datslopes$slopes.pI[datslopes$trt=="sub.TRUE"], conf.int = T)#0.2324
 wilcox.test(datslopes$slopes.pI[datslopes$trt=="add.FALSE"], conf.int = T)#.002
 wilcox.test(datslopes$slopes.pI[datslopes$trt=="add.TRUE"], conf.int = T)#.084
 
 wilcox.test(datslopes$slopes.nI[datslopes$trt=="sub.FALSE"])#.002
-wilcox.test(datslopes$slopes.nI[datslopes$trt=="sub.TRUE"])#1
+wilcox.test(datslopes$slopes.nI[datslopes$trt=="sub.TRUE"])#0.2324
 wilcox.test(datslopes$slopes.nI[datslopes$trt=="add.FALSE"])#.002
 wilcox.test(datslopes$slopes.nI[datslopes$trt=="add.TRUE"])#.002
 
@@ -193,20 +196,25 @@ wilcox.test(datslopes$slopes.nI[datslopes$trt=="add.TRUE"])#.002
 
 reminder of what the data look like
 ```{r}
-ggplot(dat40, aes(rich, pI, group=interaction(rand, dens)))+
+plotA <- ggplot(dat30, aes(rich, n.I, group=interaction(rand, dens)))+
   geom_point()+
   geom_line(aes(group=rep))+
-  facet_wrap(~dens+rand)
-ggplot(dat40, aes(rich, n.I, group=interaction(rand, dens)))+
+  facet_wrap(~rand+dens)+
+  background_grid(major = "xy", minor = "none") +
+  labs(x="richness", y="total infected")
+plotB <- ggplot(dat30, aes(rich, pI, group=interaction(rand, dens)))+
   geom_point()+
   geom_line(aes(group=rep))+
-  facet_wrap(~dens+rand)
+  facet_wrap(~rand+dens)+
+  background_grid(major = "xy", minor = "none") +
+  labs(x="richness", y="proportion infected")
 
+plot_grid(plotA, plotB, labels = c("A", "B"))
 ```
 
 should I try fitting the data to non-linear curves?
 ```{r}
-test <- dat40[1:4,]
+test <- dat30[1:4,]
 lm(pI ~ rich, test) #linear relationship between divers and disease.
 #nls(pI ~ rich, test)
 

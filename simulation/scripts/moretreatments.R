@@ -1,109 +1,28 @@
 #adding 3 more treatments: replicating substitutive design at each of the additive densities
 
 design2 <- read.csv("simulation/outputs/design2.csv")
-design2$r[design2$r==2.28] <- 2.29 #for some reason R sucks and hates 2.28. changing it slightly.
+design2$r[design2$r==2.39] <- 2.4 #for some reason R sucks and hates 2.39. changing it slightly.
 
 design.128 <- design2 %>% filter(d=="add"| d=="sub" & n==128)
-design.210 <- design2 %>% filter(d=="add"| d=="sub" & n==210)
+design.210 <- design2 %>% filter(d=="add"| d=="sub" & n==200)
 design.338 <- design2 %>% filter(d=="add"| d=="sub" & n==338)
 design.392 <- design2 %>% filter(d=="add"| d=="sub" & n==392)
 
-#prepdata2 <- function(dens, rand, design){
-  #dens="add" or "sub", rand=F or T
-  D <- design %>% filter(d==dens) %>% pull(r)#(planting distances)
-  A <- getabund4(D, rand, 1) 
-  list(A=A, D=D, dens=dens, rand=rand)
-}
-#simulation function that packages together simulation functions and responses
-#s2 <- function(Rich, A, beta, design, t=20){
-  #Rich=richness level, a=abundance dataframe from `prepdata`; beta=transition probs(csv), design=experimental design (csv)
-  n <- 10 #percent inoculated
-  
-  #load data
-  data <- A
-  A <- data$A #abundances
-  D <- data$D #planting distances
-  dens <- data$dens #density treatment
-  #rand <- data$rand #randomness
-  
-  
-  #do simulation for this community at richness level Rich
-  A1 <- A %>% 
-    filter(R==unique(R)[Rich]) %>% 
-    pull(A)
-  
-  h <- format.comp2(Rich, beta, D, A1, t)
-  HP <- HPraster2(design = design, density = dens, Rich, h, n)
-  sim <- simulate2(h, HP, t)
-  #animate(HP, simtest, pause = .2)
-  
-  #get response variables
-  RV1 <- response(sim, HP)
-  foi <- FOI(sim, HP)
-  RV2 <- response.sum(RV1, foi)
-  
-  #report
-  return(list("format.comp"=h, "HPraster"=HP, "simulate"=sim, "resp1"=RV1, "resp2"=RV2))
-}
 #load data. include density and random treatment
 Random=F
-density="add"
+density="sub"
 data <- prepdata2(density, Random, design.392)
 
-S2 <- s2(1, data, B, design.392, t = 40) #can ignore warnings. Has to do with binding results together
+S2 <- s2(1, data, B, design.392, t = 20) #can ignore warnings. Has to do with binding results together
 animate(S2$HPraster, S2$simulate)
-
-
-#simulation and results functions ("f.sim" below)
-#results3 <- function(f.sim=s2,B, nreps=10, density="sub", Random=F, design){
-  #density="add" or "sub", Rand=T or F, f.sim=s2
-  R <- c(1,2,4,6)
-  
-  #add binding functions
-  bind.response <- function(r){
-    #response
-    tmp1 <- lapply(1:4, function(x) do.call("rbind", r[[x]][4]))
-    tmp2 <- lapply(1:4, function(x) cbind(ident[x,], tmp1[[x]]))
-    plyr::ldply(tmp2, data.frame)
-  }
-  bind.respsum <- function(r){
-    #response summary
-    tmp4 <- lapply(1:4, function(x) do.call("rbind", r[[x]][5]))
-    tmp5 <- lapply(1:4, function(x) cbind(ident[x,], tmp4[[x]]))
-    plyr::ldply(tmp5, data.frame)
-  }
- 
-  #1. response
-  bres <- list(NULL)
-  bres2 <- list(NULL)
-  for(i in 1:nreps){
-    data <- prepdata2(density, Random, design)
-    res1 <- lapply(1:4, function(R) s2(R, data, B, design))
-    ident <- data.frame(rep=i, dens=density, rand=Random, rich=R)
-    bres[[i]] <- bind.response(res1)
-    bres2[[i]] <- bind.respsum(res1)
-  }
-  bres <- plyr::ldply(bres, data.frame)
-  bres2 <- plyr::ldply(bres2, data.frame)
-  
-  return(list("responses"= bres, "response.summary"= bres2))
-}
-#fb2 <- function(Beta, t=20, n=10, design){
-  SD <-  results3(s2,t, B=Beta, nreps=n, "sub", F, design) #substitutive, deterministic
-  SR <-  results3(s2,t, B=Beta, nreps=n, "sub", T, design) #substitutive, random
-  response <- rbind(SD$responses, SR$responses)
- 
-  return(response)
-}
-
-results3(s2,20, B, 2, "sub", F, design.392)
 
 #bind all the treatments together. resnormal is what has been orignally run and the res with numbers are those with additional substitutive treatments at different densities.
 resnormal <- fb(B, 10)[[1]] %>% mutate(densN=NA)
-res128 <- fb2(B, 10, design.128) %>% mutate(densN="sub128")
-res210 <- fb2(B, 10, design.210) %>% mutate(densN="sub210")
-res338 <- fb2(B, 10, design.338) %>% mutate(densN="sub338")
-res392 <- fb2(B, 10, design.392) %>% mutate(densN="sub392")
+res128 <- fb2(B,30, 10, design.128) %>% mutate(densN="sub128")
+res210 <- fb2(B,30, 10, design.210) %>% mutate(densN="sub210")
+res338 <- fb2(B,30, 10, design.338) %>% mutate(densN="sub338")
+res392 <- fb2(B,30, 10, design.392) %>% mutate(densN="sub392")
+
 l <- list(resnormal, res128, res210, res338, res392)
 resbind <- bind_rows(l)
 head(resbind)
@@ -170,9 +89,13 @@ parplot <- function(data, model){
   # predicted z-values, fitted points for droplines to surface
   fitpoints <- predict(model) 
   
+  #highlight the points that are additive and deterministic
+  data$shape <- ifelse(data$dens=="add" & data$rand==F, 21,20)
+  data$cex <- ifelse(data$dens=="add" & data$rand==F, 1.1,1)
+  
   scatter3D(z = data$pI, x = data$N, y = data$comp_Abund.N,
             theta = 20, phi = 20, ticktype = "detailed",
-            pch=16, cex=.8, col = viridis(100, direction=1),
+            pch=data$shape, cex=data$cex, col = viridis(100, direction=1),
             xlab = "N", ylab = "comp_Abund.N", zlab = "pI", clab = "pI", 
             surf = list(x = N.pred, y = comp.pred, z = pI.pred, 
                         facets = NA, alpha=.7, fit = fitpoints),
@@ -294,20 +217,10 @@ parplot(results.orig, fit5)
 ################################################################
 ################################################################
 #How about just make the substitutive design at 392 individuals?
-fb3 <- function(Beta, t, n=10, design){
-  SD <-  results3(s2,t, B=Beta, nreps=n, "sub", F, design) #substitutive, deterministic
-  SR <-  results3(s2,t, B=Beta, nreps=n, "sub", T, design) #substitutive, random
-  AD <-  results3(s2,t, B=Beta, nreps=n, "add", F, design) #additive, deterministic
-  AR <-  results3(s2,t, B=Beta, nreps=n, "add", T, design) #additive, random
-  response <- rbind(SD$responses, SR$responses, AD$responses, AR$responses)
-  response.summary <- rbind(SD$response.summary, SR$response.summary, AD$response.summary, AR$response.summary)
-  
-  return(list(responses=response, response.summary=response.summary))
-}
-resnormal2 <- fb3(B, t=20, 1, design.392)
-results3(s2,t = 20, B, nreps=1, "sub", F, design.392)
+dat <- read.csv("simulation/outputs/moretime_responses.csv")#substitutve has 392 individuals and is run for 30 time steps. See 'moretime_fitnls.R' for code
+
 #treatment results
-results.orig2 <- resnormal2[[1]] %>% 
+results.orig2 <- dat %>% 
   mutate("comp"=Rename(c(1, .3, .2, .1, 0, 0), c(1:6), species)) %>%
   mutate("comp_Abund"=comp*n) %>% 
   filter(time==max(time)) %>%
