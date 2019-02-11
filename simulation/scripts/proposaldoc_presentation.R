@@ -172,15 +172,15 @@ ggplot(datslopes, aes(dens, slopes.nI, group=interaction(rand, dens), fill=rand)
 #linear model assumes normal distribution and equal variance of the groups: SE the same. bad.
 #one-sample wilcoxon test (nonparametric t-test)
 #incidence
-wilcox.test(datslopes$slopes.pI[datslopes$trt=="sub.FALSE"], conf.int = T)#.002
-wilcox.test(datslopes$slopes.pI[datslopes$trt=="sub.TRUE"], conf.int = T)#0.2324
-wilcox.test(datslopes$slopes.pI[datslopes$trt=="add.FALSE"], conf.int = T)#.002
-wilcox.test(datslopes$slopes.pI[datslopes$trt=="add.TRUE"], conf.int = T)#.084
+wilcox.test(datslopes$slopes.pI[datslopes$trt=="sub.FALSE"], conf.int = T)#-0.127, p=0.002
+wilcox.test(datslopes$slopes.pI[datslopes$trt=="sub.TRUE"], conf.int = T)#-0.052, 0.2324
+wilcox.test(datslopes$slopes.pI[datslopes$trt=="add.FALSE"], conf.int = T)#-0.083, .002
+wilcox.test(datslopes$slopes.pI[datslopes$trt=="add.TRUE"], conf.int = T)#0.023, .084
 
-wilcox.test(datslopes$slopes.nI[datslopes$trt=="sub.FALSE"])#.002
-wilcox.test(datslopes$slopes.nI[datslopes$trt=="sub.TRUE"])#0.2324
-wilcox.test(datslopes$slopes.nI[datslopes$trt=="add.FALSE"])#.002
-wilcox.test(datslopes$slopes.nI[datslopes$trt=="add.TRUE"])#.002
+wilcox.test(datslopes$slopes.nI[datslopes$trt=="sub.FALSE"], conf.int = T)#.002
+wilcox.test(datslopes$slopes.nI[datslopes$trt=="sub.TRUE"], conf.int = T)#0.2324
+wilcox.test(datslopes$slopes.nI[datslopes$trt=="add.FALSE"], conf.int = T)#.002
+wilcox.test(datslopes$slopes.nI[datslopes$trt=="add.TRUE"], conf.int = T)#.002
 
 ##################################################
 #scatter3d plot
