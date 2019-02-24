@@ -6,14 +6,6 @@
 #4. scatter3d plot of indidence ~ rel. community comp and density
  
 
-#generate data.
-#design2 <- read.csv("simulation/outputs/design2.csv")
-#design2$r[design2$r==2.39] <- 2.4 #for some reason R sucks and hates 2.39. changing it slightly.
-#design.392 <- design2 %>% filter(d=="add"| d=="sub" & n==392)
-#moretime <- fb3(Beta = B, t = 30, n = 10, design = design.392)
-#moretimer <- moretime$responses 
-#moretimer.sum <- moretime$response.summary
-
 #load functions
 rmse <- function(p, o){
   sqrt(mean((p-o)^2))
@@ -44,6 +36,26 @@ parplot <- function(data, model, darkdens="additive"){
             main = "Proportion infected")
 }
 
+#animate a community
+design2 <- read.csv("simulation/outputs/design2.csv")
+design2$r[design2$r==2.39] <- 2.4 #for some reason R sucks and hates 2.39. changing it slightly.
+design.392 <- design2 %>% filter(d=="add"| d=="sub" & n==392)
+#choose treatment
+Random=F
+density="sub"
+data <- prepdata2(density, Random, design.392)
+S2 <- s2(4, data, B, design.392, t = 25) #can ignore warnings. Has to do with binding results together
+animate(S2$HPraster, S2$simulate, saveplot = T, Name = "subR6.")
+
+
+#analyze data: 30 time steps, 10 reps per treatment. data acquired with code below.
+#generate data.
+#design2 <- read.csv("simulation/outputs/design2.csv")
+#design2$r[design2$r==2.39] <- 2.4 #for some reason R sucks and hates 2.39. changing it slightly.
+#design.392 <- design2 %>% filter(d=="add"| d=="sub" & n==392)
+#moretime <- fb3(Beta = B, t = 30, n = 10, design = design.392)
+#moretimer <- moretime$responses 
+#moretimer.sum <- moretime$response.summary
 #load data. run for 30 time steps.
 dat <- read.csv("simulation/outputs/moretime_responses.csv")
 datsum <- read.csv("simulation/outputs/moretime_response_summary.csv")
@@ -52,6 +64,8 @@ dat <- dat %>%
   mutate(rel.n=n/n[species == "tot"]) %>% 
   mutate("comp"=Rename(c(1, .3, .2, .1, 0, 0), c(1:6), species)) %>%
   mutate("comp_Abund"=comp*n, "comp_relAbund"=comp*rel.n) 
+
+
 
 #data at time final
 dat30 <- dat %>% 

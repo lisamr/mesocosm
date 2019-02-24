@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = '/Users/lisarosenthal/Desktop/mesocosm expt/mesocosm.git')
+knitr::opts_knit$set(root.dir = '/Users/lisarosenthal/Box Sync/mesocosm expt/mesocosm.git')
 knitr::opts_chunk$set(echo = TRUE)
 ```
 #libraries
@@ -271,7 +271,7 @@ simulate2 <- function(h, HP, steps) {
 }
 
 #for visualizing
-animate <- function(HP, v, pause=0.1, col=pal) {
+animate <- function(HP, v, pause=0.1, col=pal, saveplot=F, Name=NA) {
   v <- v$values
   h <- HP$host
   p <- HP$path
@@ -282,7 +282,20 @@ animate <- function(HP, v, pause=0.1, col=pal) {
   for (i in 1:ncol(v)) { #for every time step
     values(p) <- v[,i] #assign the values of matrix v to raster p at each time step
     plot(h, asp=NA, col=col[which.color], main=i)
+    
+    if(saveplot==T){
+      # 2. Create a plot
     plot(p, legend=FALSE, asp=NA, col=scales::alpha(c(NA, "black"), .8), add=T) #plot it
+      # Open a png file of current dimensions and assign name
+      dims <- dev.size(units = "in")
+      name1 <- paste0(Name, i)
+      name2 <- paste0(paste0("simulation/images/animation/", name1), ".png")
+    dev.print(png, name2, units='in', res=150, width = dims[1], height = dims[2] )
+
+    }else{
+      plot(p, legend=FALSE, asp=NA, col=scales::alpha(c(NA, "black"), .8), add=T) #plot it
+    }
+    
     dev.flush() #not sure what this does
     Sys.sleep(pause) #give me .25 sec to see each frame
   }
