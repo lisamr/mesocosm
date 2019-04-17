@@ -35,6 +35,7 @@ parplot <- function(data, model, darkdens="additive"){
             colkey = list(length = 0.8, width = 0.4),            
             main = "Proportion infected")
 }
+library(dplyr)
 
 #animate a community
 design2 <- read.csv("simulation/outputs/design2.csv")
@@ -45,8 +46,8 @@ Random=F
 density="sub"
 data <- prepdata2(density, Random, design.392)
 S2 <- s2(4, data, B, design.392, t = 25) #can ignore warnings. Has to do with binding results together
-animate(S2$HPraster, S2$simulate, saveplot = T, Name = "subR6.")
-
+#animate(S2$HPraster, S2$simulate, saveplot = T, Name = "subR6.")
+animate(S2$HPraster, S2$simulate)
 
 #analyze data: 30 time steps, 10 reps per treatment. data acquired with code below.
 #generate data.
@@ -195,6 +196,46 @@ wilcox.test(datslopes$slopes.nI[datslopes$trt=="sub.FALSE"], conf.int = T)#.002
 wilcox.test(datslopes$slopes.nI[datslopes$trt=="sub.TRUE"], conf.int = T)#0.2324
 wilcox.test(datslopes$slopes.nI[datslopes$trt=="add.FALSE"], conf.int = T)#.002
 wilcox.test(datslopes$slopes.nI[datslopes$trt=="add.TRUE"], conf.int = T)#.002
+
+#bootstrap values to test distribution against zero
+#p values = (number of times t_boot > t_obs)/N, N=number of simulated values
+boot_test <- function(var, Median=T){
+  var_centered <- var-mean(var) #data centered around zero
+  if(Median==T){
+    t_obs <- median(var) #observed median
+    t_boot <- NA
+    for(i in 1:5000){
+      t_boot[i] <- median(sample(var_centered, size = length(var_centered), replace = T))
+  }
+  }else{
+    t_obs <- mean(var) #observed mean
+    t_boot <- NA
+    for(i in 1:5000){
+      t_boot[i] <- mean(sample(var_centered, size = length(var_centered), replace = T))
+    }
+  }
+
+  #turn t_obs into neg
+  t_obs2 <- ifelse(t_obs>0, t_obs*-1, t_obs)
+  #pvalue
+  p <- ( sum(t_boot<(t_obs2)) + sum(t_boot>(-t_obs2)) )/5000
+  #plot hist
+  range <- c(t_obs, t_boot)
+  hist(t_boot, xlim=c(min(range), max(range)))
+  abline(v=t_obs, col='red')
+  return(list(obs.estimate = t_obs, p = p))
+}
+
+d <- c("additive", "substitutive")
+r <- c("deterministic", "stochastic")
+out <- data.frame(expand.grid(d = d, r = r), est=NA, pvalue=NA)
+for(i in 1:nrow(out)){
+  tmp <- datslopes %>% filter(dens==out[i,1], rand==out[i,2]) %>% pull(slopes.pI)
+  tmp2 <- boot_test(tmp, Median = T)
+  out$est[i] <- tmp2[[1]]
+  out$pvalue[i] <- tmp2[[2]]
+}
+out
 
 ##################################################
 #scatter3d plot
