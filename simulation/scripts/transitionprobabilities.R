@@ -33,7 +33,7 @@ Ys <- function(x, t){
 MYp <- sapply(1:20, function(x) Yp(x, seq(1,10, .1))) #time=col, dist=row
 persp3D(z = (MYp), phi=0, theta = 290, xlab="time", ylab="dist", main="primary rates of infection")
 MYs <- sapply(1:50, function(x) Ys(x, seq(1,10, .1))) #time=col, dist=row
-persp3D(z = (MYs), phi=0, theta = 290, xlab="time", ylab="dist", main="primary rates of infection")
+persp3D(z = (MYs), phi=0, theta = 290, xlab="time", ylab="dist", main="secondary rates of infection")
 
 #calculate derivate from these curves.
 ys <- MYs[,20]

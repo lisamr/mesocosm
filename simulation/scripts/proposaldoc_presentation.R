@@ -7,6 +7,7 @@
  
 
 #load functions
+
 rmse <- function(p, o){
   sqrt(mean((p-o)^2))
 }
