@@ -4,6 +4,9 @@ library(readxl)
 library(ggplot2)
 library(tidyr)
 
+rm(list=ls())
+setwd('/Users/lisarosenthal/Box/mesocosm expt/mesocosm.git/')
+
 #set ggplot theme
 theme_set(theme_bw()+theme(panel.grid.minor = element_blank()))
 
@@ -95,7 +98,7 @@ rank_suscept <- sum_inf %>%
   filter(day==max(day)) %>% 
   group_by(isolate) %>% 
   mutate(rank = rank(-p_inf))
-ggplot(rank_suscept, aes(rank, p_inf, fill=family)) +
+ggplot(rank_suscept, aes(rank, p_inf, fill=species)) +
   geom_col(position=position_dodge2(), width=1) +
   facet_wrap(~isolate) +
   scale_fill_viridis_d()

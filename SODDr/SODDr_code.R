@@ -1,5 +1,4 @@
 library(gdata)
-library(plyr)
 #' A dispersal function that only has 3 values, one for local, one for adjacent
 #' cells, and zero for others.  Requires distances between cells to = 1
 #' @export
@@ -34,7 +33,7 @@ DensityDependence <- cmpfun(DensityDependence.Rfun)
 #'@import plyr 
 #'@importFrom tidyr separate_
 #'@export
-SODModel <- function(parms.df, locations, time.steps, init, df.out=TRUE, verbose=interactive()) {
+SODModel <- function(parms.df, locations, time.steps, init, df.out=TRUE) {
   
   #Tests
   if(!all.equal(dim(init), c(nrow(locations), 2*nrow(parms.df)))) {
@@ -83,15 +82,6 @@ SODModel <- function(parms.df, locations, time.steps, init, df.out=TRUE, verbose
   spore.burden <- matrix(NA, nrow=n.classes, ncol=n.locations)
   #Rprof("out.prof")
   
-  if(verbose) {
-    oldopt <- getOption("warn")
-    options(warn=2)
-    z <- try(create_progress_bar("time"), silent=TRUE)
-    if(class(z)=="try-error") z <- try(create_progress_bar("text"))
-    options(warn=oldopt)
-    z$init(length(time.steps)-1)
-    on.exit(z$term)
-  }
   for(time in time.steps[-(length(time.steps))]) {
     
     # First act in simulation step.  Given population at each location, calculate spore burden at each location
@@ -103,9 +93,9 @@ SODModel <- function(parms.df, locations, time.steps, init, df.out=TRUE, verbose
     real.recovery <- (1-force.infection) * recover
     
     for(location in 1:n.locations) {
-      force <- force.infection[,location]
+      Force <- force.infection[,location]
       real.rec <- real.recovery[,location]
-      force.matrix <- matrix(rbind(c(1-force, force), c(real.rec, 1-real.rec)), 2*n.classes, 2*n.classes, byrow=TRUE)
+      force.matrix <- matrix(rbind(c(1-Force, Force), c(real.rec, 1-real.rec)), 2*n.classes, 2*n.classes, byrow=TRUE)
       
       E <- DensityDependence(pop[time,location,], space)
       for(i in 1:n.species) {
@@ -115,10 +105,9 @@ SODModel <- function(parms.df, locations, time.steps, init, df.out=TRUE, verbose
       trans.mat <- tran.mat*force.matrix + fec.mat
       pop[time + 1,location,] <- trans.mat %*% pop[time,location,]
     }
-    if(verbose) z$step()
   }
   if(df.out) {
-    pop <- melt(pop, value.name="Population")
+    pop <- reshape::melt(pop, value.name="Population")
     pop <- tidyr::separate_(pop, "Class", into=c("Species", "AgeClass", "Disease"), sep=",", remove=TRUE, convert=TRUE)
   }
   return(pop)
