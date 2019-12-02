@@ -81,7 +81,7 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 #default planting distances (cm)
 D.add <- rev(c(1.75, 1.9, 2.28, 3))
 D.sub <- 2
-getabund4 <- function(dist, rand=F){
+getabund4 <- function(dist, L=50, rand=F){
   #load function
   getabund <- function(r, n){ 
     #r=richness, n=total individuals
@@ -111,7 +111,7 @@ getabund4 <- function(dist, rand=F){
   }
   
   #design is based on dimensions of available propogation trays
-  design <- tibble(r=dist, w=floor(25/r), l=floor(50/r), n=w*l, sp=c( 1,2,4,6))
+  design <- tibble(r=dist, w=floor(25/r), l=floor(L/r), n=w*l, sp=c( 1,2,4,6))
   tmp <- lapply(c(1,2,4,6), function(i) {
     A <- getabund(i, design$n[design$sp==i])
     R <- rep(i, length(A))
@@ -281,7 +281,7 @@ animate <- function(HP, v, pause=0.1, col=pal, saveplot=F, Name=NA) {
   which.color <- unique(values(h)) %>% sort()
   for (i in 1:ncol(v)) { #for every time step
     values(p) <- v[,i] #assign the values of matrix v to raster p at each time step
-    plot(h, asp=NA, col=col[which.color], main=i)
+    plot(h, asp=1, col=col[which.color], main=i)#asp keeps 1:1 aspect
     
     if(saveplot==T){
       # 2. Create a plot
@@ -576,15 +576,15 @@ fb <- function(Beta, n=10){
 }
 
 #functions for binding different designs. see moretreatments.R for example
-prepdata2 <- function(dens, rand, design){
+prepdata2 <- function(dens, rand, L, design){
   #dens="add" or "sub", rand=F or T
   D <- design %>% filter(d==dens) %>% pull(r)#(planting distances)
-  A <- getabund4(D, rand) 
+  A <- getabund4(D,L, rand) 
   list(A=A, D=D, dens=dens, rand=rand)
 }
 
 #simulation and results functions ("f.sim" below)
-results3 <- function(f.sim=s2, t=20, B, nreps=10, density="sub", Random=F, design){
+results3 <- function(f.sim=s2, t=20, B, L=50, nreps=10, density="sub", Random=F, design){
   #density="add" or "sub", Rand=T or F, f.sim=s2
   R <- c(1,2,4,6)
   
@@ -606,7 +606,7 @@ results3 <- function(f.sim=s2, t=20, B, nreps=10, density="sub", Random=F, desig
   bres <- list(NULL)
   bres2 <- list(NULL)
   for(i in 1:nreps){
-    data <- prepdata2(density, Random, design)
+    data <- prepdata2(density, Random,L, design)
     res1 <- lapply(1:4, function(R) s2(R, data, B, design, t))
     ident <- data.frame(rep=i, dens=density, rand=Random, rich=R)
     bres[[i]] <- bind.response(res1)
@@ -624,11 +624,11 @@ fb2 <- function(Beta, t=20, n=10, design){
  
   return(response)
 }
-fb3 <- function(Beta, t, n=10, design){
-  SD <-  results3(s2,t, B=Beta, nreps=n, "sub", F, design) #substitutive, deterministic
-  SR <-  results3(s2,t, B=Beta, nreps=n, "sub", T, design) #substitutive, random
-  AD <-  results3(s2,t, B=Beta, nreps=n, "add", F, design) #additive, deterministic
-  AR <-  results3(s2,t, B=Beta, nreps=n, "add", T, design) #additive, random
+fb3 <- function(Beta, t, L=50, n=10, design){
+  SD <-  results3(s2,t,L, B=Beta, nreps=n, "sub", F, design) #substitutive, deterministic
+  SR <-  results3(s2,t,L, B=Beta, nreps=n, "sub", T, design) #substitutive, random
+  AD <-  results3(s2,t,L, B=Beta, nreps=n, "add", F, design) #additive, deterministic
+  AR <-  results3(s2,t,L, B=Beta, nreps=n, "add", T, design) #additive, random
   response <- rbind(SD$responses, SR$responses, AD$responses, AR$responses)
   response.summary <- rbind(SD$response.summary, SR$response.summary, AD$response.summary, AR$response.summary)
   

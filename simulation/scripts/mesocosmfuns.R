@@ -585,5 +585,5 @@ fb2 <- function(Beta, n=10, design){
   
   return(response)
 }
-```
+
 

@@ -5,9 +5,10 @@
 #3. boxplots of slopes for the treatments
 #4. scatter3d plot of indidence ~ rel. community comp and density
  
+rm(list=ls())
+#load functions from 'all_sim_functions2.Rmd'
 
-#load functions
-
+#load more functions
 rmse <- function(p, o){
   sqrt(mean((p-o)^2))
 }
@@ -90,19 +91,19 @@ dat30 <- ungroup(dat30)
 #visualize results
 ##################################################
 #1. disease vs richness
-ggplot(dat30, aes(rich, n.I, group=interaction(rand, dens)))+
+plotA=ggplot(dat30, aes(rich, n.I, group=interaction(rand, dens)))+
   geom_point()+
   geom_line(aes(group=rep))+
   facet_wrap(~rand+dens)+
   background_grid(major = "xy", minor = "none") +
   labs(x="richness", y="total infected")
-ggplot(dat30, aes(rich, pI, group=interaction(rand, dens)))+
+plotB=ggplot(dat30, aes(rich, pI, group=interaction(rand, dens)))+
   geom_point()+
   geom_line(aes(group=rep))+
   facet_wrap(~rand+dens)+
   background_grid(major = "xy", minor = "none") +
   labs(x="richness", y="proportion infected")
-#plot_grid(plotA, plotB, labels = c("A", "B"))
+plot_grid(plotA, plotB, labels = c("A", "B"))
 
 #2. community competency vs disease
 ggplot(dat30, aes(comp_Abund, n.I))+
