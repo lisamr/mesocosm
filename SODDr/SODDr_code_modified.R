@@ -85,7 +85,7 @@ MakeDispMatrix <- function(parms.df, locations, parms.obj) {
     return(result)
   }
 
-  #generate dispersal matric for each species-age, called "class" and put into array
+  #generate dispersal matrix for each species-age, called "class" and put into array
   parms.df$class <- 1:nrow(parms.df) 
   spread.matrices <- array(NA, dim=c(length(parms.df$class), dim(distance.matrix)))
   for(i in 1:length(parms.df$class)){

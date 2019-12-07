@@ -81,7 +81,7 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 #default planting distances (cm)
 D.add <- rev(c(1.75, 1.9, 2.28, 3))
 D.sub <- 2
-getabund4 <- function(dist, L=50, rand=F){
+getabund4 <- function(dist, L=50, rand=F, SD=.5){
   #load function
   getabund <- function(r, n){ 
     #r=richness, n=total individuals
@@ -94,7 +94,7 @@ getabund4 <- function(dist, L=50, rand=F){
     sims <- 1000
     m2 <- matrix(NA, nrow = sims, ncol = N)
     for(i in 1:sims){
-      y2 <- rlnorm(1:N, meanlog = 1, sdlog = .5) %>% 
+      y2 <- rlnorm(1:N, meanlog = 1, sdlog = SD) %>% 
         sort(decreasing = T)
       m2[i,] <- y2
     }
@@ -576,15 +576,15 @@ fb <- function(Beta, n=10){
 }
 
 #functions for binding different designs. see moretreatments.R for example
-prepdata2 <- function(dens, rand, L, design){
+prepdata2 <- function(dens, rand, L=50, design, SD=.5){
   #dens="add" or "sub", rand=F or T
   D <- design %>% filter(d==dens) %>% pull(r)#(planting distances)
-  A <- getabund4(D,L, rand) 
+  A <- getabund4(D,L, rand, SD) 
   list(A=A, D=D, dens=dens, rand=rand)
 }
 
 #simulation and results functions ("f.sim" below)
-results3 <- function(f.sim=s2, t=20, B, L=50, nreps=10, density="sub", Random=F, design){
+results3 <- function(f.sim=s2, t=20, B, L=50, nreps=10, density="sub", Random=F, design, SD=.5){
   #density="add" or "sub", Rand=T or F, f.sim=s2
   R <- c(1,2,4,6)
   
@@ -606,7 +606,7 @@ results3 <- function(f.sim=s2, t=20, B, L=50, nreps=10, density="sub", Random=F,
   bres <- list(NULL)
   bres2 <- list(NULL)
   for(i in 1:nreps){
-    data <- prepdata2(density, Random,L, design)
+    data <- prepdata2(density, Random,L, design, SD)
     res1 <- lapply(1:4, function(R) s2(R, data, B, design, t))
     ident <- data.frame(rep=i, dens=density, rand=Random, rich=R)
     bres[[i]] <- bind.response(res1)
@@ -624,11 +624,11 @@ fb2 <- function(Beta, t=20, n=10, design){
  
   return(response)
 }
-fb3 <- function(Beta, t, L=50, n=10, design){
-  SD <-  results3(s2,t,L, B=Beta, nreps=n, "sub", F, design) #substitutive, deterministic
-  SR <-  results3(s2,t,L, B=Beta, nreps=n, "sub", T, design) #substitutive, random
-  AD <-  results3(s2,t,L, B=Beta, nreps=n, "add", F, design) #additive, deterministic
-  AR <-  results3(s2,t,L, B=Beta, nreps=n, "add", T, design) #additive, random
+fb3 <- function(Beta, t, L=50, n=10, design, sd=.5){
+  SD <-  results3(s2,t,L, B=Beta, nreps=n, "sub", F, design, sd) #substitutive, deterministic
+  SR <-  results3(s2,t,L, B=Beta, nreps=n, "sub", T, design, sd) #substitutive, random
+  AD <-  results3(s2,t,L, B=Beta, nreps=n, "add", F, design, sd) #additive, deterministic
+  AR <-  results3(s2,t,L, B=Beta, nreps=n, "add", T, design, sd) #additive, random
   response <- rbind(SD$responses, SR$responses, AD$responses, AR$responses)
   response.summary <- rbind(SD$response.summary, SR$response.summary, AD$response.summary, AR$response.summary)
   

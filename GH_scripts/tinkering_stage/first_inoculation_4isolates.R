@@ -3,6 +3,7 @@ library(dplyr)
 library(readxl)
 library(ggplot2)
 library(tidyr)
+library(plotly)
 
 rm(list=ls())
 setwd('/Users/lisarosenthal/Box/mesocosm expt/mesocosm.git/')
@@ -32,7 +33,7 @@ df <- expand.grid(species=species, isolate=isolate) %>%
          infected_day6=NA,
          notes=NA) 
 head(df)  
-write.csv(df, 'GH_output/tinkering_stage/firstinoculations_4isolates.csv', row.names = F)
+#write.csv(df, 'GH_output/tinkering_stage/firstinoculations_4isolates.csv', row.names = F)
 
 
 ##############################
@@ -63,6 +64,7 @@ ggplot(sum_emergence, aes(day, perc_emerged, color=species, group=species)) +
   geom_hline(yintercept=.9, color='firebrick3', lty=2)
 
 #hard to tell from the plot which ones have emergence rates >.9
+#clover also should be in there. had a mishap in the gh.
 sum_emergence %>% filter(day==9, perc_emerged>=.9)
 good_germ <- sum_emergence %>% filter(day==9, perc_emerged>=.9) %>% pull(species)
 df1$goodgerm <- ifelse(df1$species %in% good_germ, 1, 0)
@@ -98,8 +100,8 @@ rank_suscept <- sum_inf %>%
   filter(day==max(day)) %>% 
   group_by(isolate) %>% 
   mutate(rank = rank(-p_inf))
-ggplot(rank_suscept, aes(rank, p_inf, fill=species)) +
+p1 <- ggplot(rank_suscept, aes(rank, p_inf, fill=species)) +
   geom_col(position=position_dodge2(), width=1) +
   facet_wrap(~isolate) +
   scale_fill_viridis_d()
-
+ggplotly(p1)

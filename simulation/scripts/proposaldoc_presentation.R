@@ -46,7 +46,7 @@ design.392 <- design2 %>% filter(d=="add"| d=="sub" & n==392)
 #choose treatment
 Random=F
 density="sub"
-data <- prepdata2(density, Random, design.392)
+data <- prepdata2(density, Random,L=50, design.392)
 S2 <- s2(4, data, B, design.392, t = 25) #can ignore warnings. Has to do with binding results together
 #animate(S2$HPraster, S2$simulate, saveplot = T, Name = "subR6.")
 animate(S2$HPraster, S2$simulate)
@@ -140,6 +140,19 @@ ggplot(dat2, aes(pE, pI, color=rich))+
   facet_grid(~dens)+
   ylim(0,1)
 
+#4. relative community competency vs richness. are they collinear? kinda.
+ggplot(dat30, aes(rich, comp_Abund.N))+
+  geom_point(aes(color=pI))+
+  scale_colour_viridis_c()+
+  theme_bw()
+ggplot(dat30, aes(comp_Abund.N, pI))+
+  geom_point(aes(color=rich))+
+  scale_colour_viridis_c()+
+  theme_bw()
+ggplot(dat30, aes(rich, pI))+
+  geom_point(aes(color=comp_Abund.N))+
+  scale_colour_viridis_c()+
+  theme_bw()
 ##################################################
 #boxplots of slopes for the treatments
 ##################################################

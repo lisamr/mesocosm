@@ -1,4 +1,4 @@
-#Exploring the SODDr model to see if it can be adapted for mesocosm. at the moment, i've created 2 models--an IBM and ODE model. The IBM is very specific, but slow, hard to adapt, and likely has syntax errors.the ODE model is very short, thus easy to adapt and less error prone, but doesn't quite capture what's going on spatially. The SODDr model from Noam Ross/Rich Cobb might be what I want. 
+#Exploring the SODDr model to see if it can be adapted for mesocosm. at the moment, i've created 2 models--an IBM and ODE model. The IBM is very specific, but slow, hard to adapt, and likely has syntax errors.the ODE model is very short, thus easy to adapt and less error prone, but doesn't quite capture what's going on spatially. Likely it overestimates infections because it's not spatially explicit. The SODDr model from Noam Ross/Rich Cobb might be what I want. 
 #https://www.noamross.net/archives/2012-11-16-sod-dynamics-1/
 
 #devtools::install_github("noamross/SODDr", force = T)#make sure to NOT update dependent packages
@@ -16,7 +16,8 @@ theme_set(theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.mino
 
 #read in tree params from package
 treeparms.df <- read.csv((system.file('paper_tree_parms_eq.csv', package="SODDr")), stringsAsFactors = F)
-#3 species, only 1 (tanoak) has multiple age classes. each group has parms for SIR and the transitions, space (resource competition) requirements, kernels for dispersal, WAIF (like B_ij). not sure about the difference between kernel.par1 and kernel.par2. assume there's a kernel function with 2 arguments.
+#3 species, only 1 (tanoak) has multiple age classes. each group has parms for SIR and the transitions, space (resource competition) requirements, kernels for dispersal, WAIF (I think it's equivalent to B_ij here). 
+#page 11 of supplementary materials explains source of params
 
 ################################################
 #RUN SIMULATION WITHOUT DISEASE
@@ -312,16 +313,7 @@ ggplot(pop_ind.totals, aes(Time, TotPop)) +
   facet_grid(~Species) +
   scale_color_viridis_c(begin = .1, end=.9)
 
-#create animation
-#TotTan adds up pops of big tanoaks at each location and time
-#FracDisease quantifies pops of infected big tanoaks divided by total population
-pop_ind.df %>% 
-  filter(!Species==1, value>0) %>% 
-  select(-AgeClass) %>% 
-  group_by(Time, Location, Disease) %>% 
-  summarise(bay=sum(value[which(Species==2)]),
-            redwood=sum(value[which(Species==3)])) %>% 
-  head
+#for some reason pop values can be negative. I think Noam mentioned this in one of his blogs. 
 
 #visualize spread with animation
 animdf <- pop_ind.df %>% 
@@ -344,4 +336,7 @@ anim <- ggplot(animdf, aes(x, y)) +
   ease_aes('linear')
 #play
 animate(anim, fps=4)
+
+#CONCLUSION
+#Not sure if this model can work for my needs. I need each cell to be 1 individual, but the model says that each cell can be S and I at the same time. Have to think about how to change that. 
   
