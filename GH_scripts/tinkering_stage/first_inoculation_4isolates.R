@@ -1,4 +1,6 @@
 #monitoring emergence and susceptibility to the four Rhizoc isolates
+#plants inoculated after 9 days since sowing, inoculum in PDA for 3 days.
+
 library(dplyr)
 library(readxl)
 library(ggplot2)
@@ -58,14 +60,16 @@ sum_emergence <- sum_emergence %>%
          day=as.integer(gsub('day', '', day)))
 
 #plot emergence
-ggplot(sum_emergence, aes(day, perc_emerged, color=species, group=species)) +
+pemerge <- ggplot(sum_emergence, aes(day, perc_emerged, color=species, group=species)) +
   geom_point()+
   geom_line()+
   geom_hline(yintercept=.9, color='firebrick3', lty=2)
+plotly::ggplotly(pemerge)
 
 #hard to tell from the plot which ones have emergence rates >.9
 #clover also should be in there. had a mishap in the gh.
 sum_emergence %>% filter(day==9, perc_emerged>=.9)
+sum_emergence %>% filter(day==9) %>% arrange(-perc_emerged)
 good_germ <- sum_emergence %>% filter(day==9, perc_emerged>=.9) %>% pull(species)
 df1$goodgerm <- ifelse(df1$species %in% good_germ, 1, 0)
 
@@ -83,7 +87,9 @@ sum_inf %>% filter(!is.na(p_inf)) %>%
   ggplot(., aes(day, p_inf, group=isolate)) +
   geom_point() +
   geom_line(aes(color=isolate)) +
-  facet_wrap(~species)
+  facet_wrap(~species) +
+  labs(title='first inoc 4 isolates',
+       subtitle = 'plants inoc day9')
 
 sum_inf %>% filter(!is.na(p_inf)) %>% 
   ggplot(., aes(day, p_inf, group=species, color=species)) +
@@ -105,3 +111,4 @@ p1 <- ggplot(rank_suscept, aes(rank, p_inf, fill=species)) +
   facet_wrap(~isolate) +
   scale_fill_viridis_d()
 ggplotly(p1)
+#ggsave('GH_plots/rank_suscept.png', p1, device = 'png')
