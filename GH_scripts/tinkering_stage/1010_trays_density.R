@@ -1,5 +1,6 @@
 #design 1010 tray densities
 #need to figure out how many inds will be in a 1010 tray. look at both square and hexagonal grids
+rm(list=ls())
 library(raster)
 library(tidyverse)
 library(ggplot2)
@@ -11,38 +12,32 @@ values(tray) <- 1
 tray <- rasterToPolygons(tray) #convert to sp poly
 plot(tray)
 
-#create hexagon grid to overlay.
-size <- 1.4
-hex_points <- spsample(tray, type = "hexagonal", cellsize = size)
-hex_grid <- HexPoints2SpatialPolygons(hex_points, dx = size)
-plot(tray, col = "grey50", axes = TRUE)
-plot(hex_points, col = "black", pch = 20, cex = 0.5, add = T)
-plot(hex_grid, border = "orange", add = T)
-
-#square grid
-sq_raster <- raster(tray, resolution=1)
-values(sq_raster) <- 1
-sq_grid <- rasterToPolygons(sq_raster)
-#plot
-plot(tray, col = "grey50", axes = TRUE)
-plot(sq_grid, border = "orange", add = T)
-
-#quantify number of points
-length(hex_grid) 
-length(sq_grid) 
-
-#check out number of cells over a series of different interplanting distances
+#create square grid
 make_grid_sq <- function(r){
   sq_raster <- raster(tray, resolution=r)
   values(sq_raster) <- 1
   sq_grid <- rasterToPolygons(sq_raster)
   return(sq_grid)
 }
+#create hexagon grid
 make_grid_hex <- function(r){
   hex_points <- spsample(tray, type = "hexagonal", cellsize = r)
   hex_grid <- HexPoints2SpatialPolygons(hex_points, dx = r)
   return(hex_grid)
 }
+
+#plot grids
+plot_grid <- function(grid){
+  x <- coordinates(grid)[,1]
+  dist <- x[2]-x[1]
+  title <- paste(length(grid), "cells, dist=", dist)
+  plot(tray, col = "grey90", axes = F, main=title)
+  plot(grid, border = "royalblue4", add = T)
+  points(coordinates(grid), pch=16, cex=.5, col='black')
+}
+plot_grid(make_grid_sq(1))
+plot_grid(make_grid_hex(1))
+
 
 #plot distance against # cells
 Dist <- seq(1,3,by=.1) %>% round(1) #seq makes imprecise numbers, %in% needs perfect equality. 
@@ -83,12 +78,11 @@ dat4 %>% group_by(grid) %>%
             cells_total = cells_per_sp*5,
             ninoculated = .1*cells_total) 
 
-
-
-
-
-
-
+#Make templates
+pdf("GH_plots/grid_templates.pdf")
+lapply(distances2, function(x) plot_grid(make_grid_sq(x)))
+lapply(distances2, function(x) plot_grid(make_grid_hex(x)))
+dev.off()
 
 
 
