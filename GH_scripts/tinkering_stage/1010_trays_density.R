@@ -5,8 +5,8 @@ library(raster)
 library(tidyverse)
 library(ggplot2)
 
-#create a raster layer for tray. 1010 tray is 25.4cm^2. 
-width <- 25.4
+#create a raster layer for tray. planting area for 1010 tray is 9.5in^2. 
+width <- 9.5*2.54
 tray <- raster(ncol=1, nrow=1, crs="+proj=utm +zone=1 +datum=WGS84", xmn=0, xmx=width, ymn=0, ymx=width) 
 values(tray) <- 1
 tray <- rasterToPolygons(tray) #convert to sp poly
@@ -40,7 +40,7 @@ plot_grid(make_grid_hex(1))
 
 
 #plot distance against # cells
-Dist <- seq(1,3,by=.1) %>% round(1) #seq makes imprecise numbers, %in% needs perfect equality. 
+Dist <- seq(1,3,by=.05) %>% round(2) #seq makes imprecise numbers, %in% needs perfect equality. 
 sq <- sapply(Dist, function(x) length(make_grid_sq(x)))
 hex <- sapply(Dist, function(x) length(make_grid_hex(x)))
 dat <- data.frame(Dist, sq, hex)
@@ -69,7 +69,7 @@ ggplot(dat3, aes(richness, ncells, color=grid)) +
   geom_line()
 
 #how many seeds is that for 1 whole series of densities? gonna need to order more seeds. for this tinkering around experiment, just do 3 distances. 
-distances2 <- c(3, 2, 1.5)
+distances2 <- c(3, 2, 1.4)
 dat4 <- dat2 %>% 
   filter(Dist %in% distances2)
 dat4 %>% group_by(grid) %>% 
