@@ -115,11 +115,20 @@ plot_grid_inoc <- function(r, ...){
   dist <- x[2]-x[1]
   title <- paste(length(gridh), "cells, dist=", dist)
   #plot
-  plot(tray, col = "grey90", axes = F, main=title, ...)
+  plot(tray, col = "grey90", main=title, ...)
   plot(gridh, border = "royalblue4", add = T)
   points(coordinates(gridh[samp]), pch=16, cex=.5, col='black')
+  #put in axes
+  xs <- unique(sort(round(x, 4)))
+  xs <- xs[seq(1, length(xs), by=2)] #get odds
+  ys <- coordinates(gridh)[,2] %>% 
+    round(4) %>% sort %>% unique 
+  axis(1, at=xs, labels=c(1:length(xs)), pos=0, las=2) #bottom
+  axis(3, at=xs, labels=c(1:length(xs)), pos=width, las=2) #top
+  axis(2, at=ys, labels=rev(LETTERS[c(1:length(ys))]), pos=0, las=2) #left
+  axis(4, at=ys, labels=rev(LETTERS[c(1:length(ys))]), pos=width, las=2) #right
 }
-plot_grid_inoc(3)
+plot_grid_inoc(1.4)
 
 #print maps for 1010 trial
 head(dat5)
