@@ -225,41 +225,56 @@ design_augmented %>%
 
 #plot maps of trays with ggplot
 names(dflist) #ID of the maps
-tmp <- spdf_list[[112]] #ex/157 "0.5.9.det.add.6"   
-#make df readable to ggplot
-# add to data a "ID" column for each feature
-tmp$id <- rownames(tmp@data)
-# create a data.frame from our spatial object
-tmp_df <- fortify(tmp, region = "id") %>% 
-  #merge the "fortified" data with attribute data
-  merge(., tmp@data, by = "id")
+plot_maps <- function(i){ #i is which tray
+  tmp <- spdf_list[[i]] #ex/157 "0.5.9.det.add.6"   
+  #make df readable to ggplot
+  # add to data a "ID" column for each feature
+  tmp$id <- rownames(tmp@data)
+  # create a data.frame from our spatial object
+  tmp_df <- fortify(tmp, region = "id") %>% 
+    #merge the "fortified" data with attribute data
+    merge(., tmp@data, by = "id")
+  
+  #add in color id for the species so its the same every time
+  Colors <- pal
+  names(Colors) <- levels(tmp_df$spID)
+  
+  #make a df of centroids to plot inoculated plants. 
+  tmp_centroids <- data.frame(coordinates(tmp), inoculated=tmp$inoculated)
+  
+  #calculate axis labels
+  xs <- unique(sort(round(tmp_centroids$X1, 4)))
+  xs <- xs[seq(1, length(xs), by=2)] #get odds
+  ys <- tmp_centroids$X2 %>% round(4) %>% sort %>% unique 
+  
+  #plot in ggplot!
+  p1 <- ggplot(data = tmp_df, aes(x=long, y=lat)) +
+    geom_polygon(aes(group = group, fill = spID))  +
+    geom_path(aes(group = group), color = "white") +
+    geom_point(data=tmp_centroids, aes(X1, X2), color=ifelse(tmp_centroids$inoculated==1, "black", NA)) +
+    coord_equal() +
+    scale_fill_manual(values=Colors) +
+    labs(title = paste(paste0('ID', tmp_df$trayID[1], "-"), tmp_df$rand[1], tmp_df$dens[1], paste0('replicate', tmp_df$rep[1]), sep = '-'),
+         subtitle = paste("SD =", tmp_df$SD)) +
+    scale_x_continuous(name='', breaks=xs, labels=1:length(xs), sec.axis = dup_axis()) +
+    scale_y_continuous(name='', breaks=ys, labels=rev(LETTERS[1:length(ys)]), sec.axis = dup_axis())
+  
+  return(p1)
+}
 
-#add in color id for the species so its the same every time
-Colors <- pal
-names(Colors) <- levels(tmp_df$spID)
-
-#make a df of centroids to plot inoculated plants. 
-tmp_centroids <- data.frame(coordinates(tmp), inoculated=tmp$inoculated)
-
-#calculate axis labels
-xs <- unique(sort(round(tmp_centroids$X1, 4)))
-xs <- xs[seq(1, length(xs), by=2)] #get odds
-ys <- tmp_centroids$X2 %>% round(4) %>% sort %>% unique 
-
-#plot in ggplot!
-ggplot(data = tmp_df, aes(x=long, y=lat)) +
-  geom_polygon(aes(group = group, fill = spID))  +
-  geom_path(aes(group = group), color = "white") +
-  geom_point(data=tmp_centroids, aes(X1, X2), color=ifelse(tmp_centroids$inoculated==1, "black", NA)) +
-  coord_equal() +
-  scale_fill_manual(values=Colors) +
-  labs(title = paste(paste0('ID', tmp_df$trayID[1], "-"), tmp_df$rand[1], tmp_df$dens[1], paste0('replicate', tmp_df$rep[1]), sep = '-'),
-       subtitle = paste("SD =", tmp_df$SD)) +
-  scale_x_continuous(name='', breaks=xs, labels=1:length(xs), sec.axis = dup_axis()) +
-  scale_y_continuous(name='', breaks=ys, labels=rev(LETTERS[1:length(ys)]), sec.axis = dup_axis())
-
+plot_maps(157)
 
 
 
 #export----
+
+#design dataframe 
+design_augmented
+
+#list of spatial dataframes
+spdf_list
+
+#spatial maps to physically print
+lapply(1:length(spdf_list), plot_maps)
+
 
