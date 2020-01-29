@@ -84,8 +84,8 @@ grid_df <- SpatialPolygonsDataFrame(
     ID=row.names(grid),
     x=coordinates(grid)[,1],
     y=coordinates(grid)[,2],
-    spID=sample(c('sp_1', 'sp_1'), length(grid), T),
-    inoculated=sample(c(rep(1, ninoc), rep(0, length(grid)-ninoc)))
+    spID=sample(c('sp_1', 'sp_2'), length(grid), T, prob = c(1.5,1)),
+    state=sample(c(rep("C", ninoc), rep("S", length(grid)-ninoc)))
   ))
 
 #quick plot
@@ -105,8 +105,6 @@ make_agents_df <- function(grid_df){
   
   
   #make the dataframe
-  #initial states
-  agents$state <- ifelse(agents$inoculated==1, "C", "S") 
   #which ones are neighbors
   agents$adj <- sapply(1:nrow(agents), function(i) {
     x <- which(adj[row.names(agents)[i],]==T)
@@ -131,7 +129,7 @@ IBM <- function(agents){
   #define matrix to fill in all the states. nrow=n_IDs, ncol=times
   states_matrix <- matrix(NA, nrow = nrow(agents), ncol = tfinal)
   #initiate first time step
-  states_matrix[,1] <- agents$state
+  states_matrix[,1] <- as.character(agents$state)
   
   #inoculum decay
   C_to_S <- 1 - exp(-delta) 
@@ -157,10 +155,11 @@ IBM <- function(agents){
     #sum all of the beta_ij's for all of the infected IDs and divide by total # neighbors. 
     #beta's of the adjacent plants for a given ID
     beta_adj <- trans[,,t][agents$ID[i], agents$adj[[i]]]
-    #ask if neighbors are infected
+    #are neighbors are infected?
     adj_is_I <- states_matrix[,t][agents$adj[[i]]]=="I" 
     #rate of transmission from S -> I 
-    1 - exp(-1*sum(beta_adj*adj_is_I)/agents$n_adj[i]) 
+    1 - exp(-1*sum(beta_adj*adj_is_I)) #number infected
+    #1 - exp(-1*sum(beta_adj*adj_is_I)/agents$n_adj[i]) #proporiton infection
   }
   
   for(t in 1:(tfinal-1)){ #at every time step
@@ -206,6 +205,59 @@ IBM <- function(agents){
 
 #run epidemic----
 testrun <- IBM(agents)
-View(testrun)
+head(testrun)
 
-#adjust parameters until you successfully see spread. also, should it be proportion or number infecteds that affects the plant to plant transmission? Also visualize.
+#visualize----
+
+#first plot summary of S and I
+sum_states <- function(data) cbind(sum(data %in% c("S", "C")), sum(data =="I"))
+df1 <- data.frame(time=1:ncol(testrun), t(apply(testrun, 2, sum_states)))
+names(df1) <- c('time', 'S', 'I')
+df1 <- pivot_longer(df1, cols=c('S', 'I'), names_to = 'state', values_to = 'count')
+ggplot(df1, aes(time, count, color=state)) +
+  geom_line()
+
+#now plot spatial map of the spread
+
+#dataframe matrix of states
+states_dfm <- data.frame(ID = grid_df$ID, testrun) 
+
+# create a ggplot-readable df from our spatial object
+tmp <- fortify(grid_df, region = "ID") %>% 
+  rename('ID'='id') %>% 
+  #merge with attribute data and matrix of states
+  merge(., grid_df@data, by= "ID") %>% 
+  merge(., states_dfm, by = "ID") %>% 
+  #remove state column (it's redundant)
+  dplyr::select(-state) %>% 
+  #pivot longer by states/time
+  pivot_longer(cols = c(paste0("X", 1:tfinal)), 
+               names_to = 'time', values_to = 'state') %>% 
+  #rename time to be numeric
+  mutate(time = as.integer(gsub('X', '', time)) )
+
+#create a df of the centroids so infections can be plotted
+tmp_centroids <- tmp %>% 
+  group_by(ID) %>% 
+  top_n(tfinal, order) #takes 1 point per time step
+
+
+#add in color id for the species so its the same every time
+Colors <- pal
+names(Colors) <- levels(tmp$spID)
+
+#map it!
+require(gganimate)
+staticplot <- ggplot(data=tmp, aes(long, lat, group = group)) +
+  geom_polygon(aes(fill = spID)) +
+  geom_path(color = "white") +
+  coord_equal() +
+  geom_point(data=tmp_centroids, aes(x, y), size = 3, alpha = ifelse(tmp_centroids$state=="I", .5, 0)) +
+  scale_fill_manual(values=Colors)
+
+#takes about 3 minutes
+animplot <- staticplot + 
+  transition_states(time) +
+  ggtitle('time step {closest_state} of {tfinal}')
+anim_save('GH_plots/spread_map.gif', animplot)
+
