@@ -145,6 +145,7 @@ get_CC_data <- function(design){
 sd5 <- filter_design(5)
 sd2 <- filter_design(2)
 sd1 <- filter_design(1)
+
 #look at their summaries
 #get_CC_data(sd5)
 #get_CC_data(sd2)
@@ -163,12 +164,15 @@ dflist <- suppressWarnings(split(design_augmented, f = with(design_augmented, li
   discard(function(x) nrow(x) == 0)
 
 dflist_to_sp <- function(i){
+  
   #turn df to spatial map, adding attribute data along the way.
   tmp <- dflist[[i]] %>% arrange(species)
   SP <- make_grid_hex(tmp$Dist[1])
   SPdf <- SpatialPolygonsDataFrame(
     SP, data.frame(
-      row.names = paste0("ID", 1:length(SP)),
+      ID=row.names(SP),
+      x=coordinates(SP)[,1],
+      y=coordinates(SP)[,2],
       trayID = rep(tmp$trayID[1], length(SP)),
       rand = rep(tmp$rand[1], length(SP)),
       dens = rep(tmp$dens[1], length(SP)),
@@ -186,18 +190,18 @@ dflist_to_sp <- function(i){
   x <- sample(tmp$species, x, replace = T, prob = tmp$nind) %>% table() 
   ninoc_sp <- data.frame(ninoc_sp + x)
   
-  #get vector for inoculated or not
-  inoculated <- unlist(sapply(1:nrow(ninoc_sp), function(i) c(rep(1, ninoc_sp$Freq[i]), rep(0, tmp$nind[i]-ninoc_sp$Freq[i])) )) 
-  SPdf$inoculated <- inoculated
+  #get vector for inoculated or not (Challenged or Susceptible)
+  state <- unlist(sapply(1:nrow(ninoc_sp), function(i) c(rep("C", ninoc_sp$Freq[i]), rep("S", tmp$nind[i]-ninoc_sp$Freq[i])) )) 
+  SPdf$state <- state
   
-  #randomize locations of cells. 
-  SPdf@data <- SPdf@data[sample(1:length(SP)),]#randomize locations.
-  row.names(SPdf@data) <- paste0("ID", 1:length(SP))#ensures coordinates are correct.
+  #randomize locations of species. just randomize last three columns
+  randomized <- SPdf@data[sample(1:length(SP)),(ncol(SPdf)-3):ncol(SPdf)]
+  SPdf@data <- cbind(SPdf@data[,1:(ncol(SPdf)-4)], randomized)
   
   return(SPdf)
 }
 
-#create spatial polygons dataframe for each tray.
+#create spatial polygons dataframe for each tray. takes a few minutes
 spdf_list <- lapply(1:length(dflist), dflist_to_sp)
 
 
@@ -240,7 +244,7 @@ plot_maps <- function(i){ #i is which tray
   names(Colors) <- levels(tmp_df$spID)
   
   #make a df of centroids to plot inoculated plants. 
-  tmp_centroids <- data.frame(coordinates(tmp), inoculated=tmp$inoculated)
+  tmp_centroids <- data.frame(coordinates(tmp), state=tmp$state)
   
   #calculate axis labels
   xs <- unique(sort(round(tmp_centroids$X1, 4)))
@@ -251,7 +255,8 @@ plot_maps <- function(i){ #i is which tray
   p1 <- ggplot(data = tmp_df, aes(x=long, y=lat)) +
     geom_polygon(aes(group = group, fill = spID))  +
     geom_path(aes(group = group), color = "white") +
-    geom_point(data=tmp_centroids, aes(X1, X2), color=ifelse(tmp_centroids$inoculated==1, "black", NA)) +
+    geom_point(data=tmp_centroids, aes(X1, X2), 
+               alpha=ifelse(tmp_centroids$state=="C", 1, 0)) +
     coord_equal() +
     scale_fill_manual(values=Colors) +
     labs(title = paste(paste0('ID', tmp_df$trayID[1], "-"), tmp_df$rand[1], tmp_df$dens[1], paste0('replicate', tmp_df$rep[1]), sep = '-'),
@@ -269,12 +274,14 @@ plot_maps(157)
 #export----
 
 #design dataframe 
-design_augmented
+write.csv(design_augmented, 'GH_output/species_distributions/design_augmented.csv', row.names = F)
+
 
 #list of spatial dataframes
-spdf_list
+saveRDS(spdf_list, 'GH_output/species_distributions/spdf_list.RDS')
+#open with `readRDS('filename')`
 
 #spatial maps to physically print
-lapply(1:length(spdf_list), plot_maps)
+#lapply(1:length(spdf_list), plot_maps) #run this to print the maps
 
 
