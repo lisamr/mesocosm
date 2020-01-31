@@ -1,12 +1,11 @@
-#IBM tutorial. Will keep the code in "IBM.R" as the source code for all the functions. Here, I'll put those to use, but the code will be cleaner (won't have the functions defined here).
+#IBM tutorial. "IBM_functions.R" is the source code for all the functions. Here, I'll put those to use, but the code will be cleaner (won't have the functions defined here).
 
-#use community compositions from experimental design (take output from 'species_distributions.R')
+#using sample community composition
 
 rm(list=ls())
 
 #load source code----
 source('IBM/scripts/IBM_functions.R')
-
 
 #parameters----
 #tray dimensions
@@ -22,9 +21,18 @@ comp <- c(1, .5, .3, .2, 0, 0) #vector of relative "competencies"
 
 #DISEASE 
 #transmission curves
-#values approximated from Otten et al. (2003)
-beta_curve <- function(x) .2*exp(-3*(log(x/11))^2)
-alpha_curve <- function(x) .4*(1-.3)^x
+#mean values approximated from Otten et al. (2003)
+beta_curve <- function(t) .2*exp(-3*(log(t/11))^2)
+alpha_curve <- function(t) .4*(1-.3)^t
+
+#distance decay in probability of secondary transmission from Kleczkowski et al. (1997)
+dist_decay <- function(x, a=14.9, d=.36, tau=3.73, sigma=.00099){
+  C <- a*d*exp(d*tau)
+  y <- C*exp(-sigma*x^2)
+  #standardize to 0-1, relative to a distance of 0
+  y0 <- C*exp(-sigma*0^2)
+  y/y0
+}
 
 ### transmission from C -> S ###
 #inoculum decay rate invariant of species.
@@ -42,30 +50,43 @@ alpha_i_t <- make_alpha_i_t(comp)
 
 #create community----
 #I created a sample community in the IBM source code. It's a simple 2 species community. However, you'll likely want to make your own. 
-sample_grid <- sample_community(nspecies = 1)
+sample_grid <- sample_community(nspecies = 1, planting_dist = 1)
 
 #quick plot
 plot(sample_grid) + text(coordinates(sample_grid), cex=.5, col=as.numeric(sample_grid$spID))
 
-#define agents dataframe----
-
-#create dataframe that defines ID, coordinates, species ID, state, # total neighbors, neighbor ID vector. This dataframe will stay stationary through time. `IBM` will keep track of the state changes. 
-agents <- make_agents_df(sample_grid)
-head(agents)
 
 #run epidemic----
 
 #for every individual, if state==C, then C->C, C->S, or C->I; if state==S, then S->S, or S->I; if state==I, then always stays I. Each transition has a probability and the fate of the transition determined by a value drawn from a uniform distribution between 0 and 1. Will need to loop through every individual every time step. At each time step, record the state of every individual. Output should be a matrix of states, with rows equalling # individuals and cols equalling # time steps. 
 
-testrun <- IBM(agents)
-head(testrun)
+#try out transmission with nearest neighbor only infections and ones with distance decay (kernel) on two communities with different densities
+
+#communities
+samplegrid1 <- sample_community(1, 1) #planting dist=1cm
+samplegrid2 <- sample_community(1, 2) #planting dist=2cm
+
+#simulate!
+testrunNN1 <- IBM(samplegrid1, Type = "NN")
+testrunNN2 <- IBM(samplegrid2, Type = "NN")
+testrunKernel1 <- IBM(samplegrid1, Type = "Kernel", spatialdecay = .002)
+testrunKernel2 <- IBM(samplegrid2, Type = "Kernel", spatialdecay = .002)
+
+#view
+head(testrunNN1); head(testrunKernel1)
 
 #visualize----
 
 #first plot summary of S and I
-plotS_I(testrun)
+p1 <- plotS_I(testrunNN1)[[2]]
+p2 <- plotS_I(testrunNN2)[[2]]
+p3 <- plotS_I(testrunKernel1)[[2]]
+p4 <- plotS_I(testrunKernel2)[[2]]
+cowplot::plot_grid(p1, p2, p3, p4, labels = c('NN1', 'NN2', 'Kernel1', 'Kernel2'))
 
-#now plot spatial map of the spread (takes about 3 minutes)
-plot_spread_map(sample_grid, testrun)
-#anim_save('GH_plots/spread_map.gif') #saves last animation
+
+#now plot spatial map of the spread (animation is ~3 minutes)
+plot_spread_map(samplegrid2, testrunNN2, animate = F)
+plot_spread_map(samplegrid2, testrunKernel2, animate = F)
+#anim_save('IBM/plots/spread_map.gif') #saves last animation
 

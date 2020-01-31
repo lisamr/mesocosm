@@ -14,7 +14,7 @@ length <- width
 
 #initial design pars
 richness <- c(1,2,4,6)
-Dist <- c(3, 2.4, 1.8, 1.5) #interplanting distances
+Dist <- c(2.7, 2.4, 2, 1.75) #interplanting distances
 Sub <- data.frame(dens="sub", Dist=1.8, ncells=208, richness)#values informed by hexagon grid below.
 nreps <- 10
 comp <- c(1, .3, .2, .1, .001, 0) #vector of relative "competencies". have to differentiate sp5 and 6 somehow.

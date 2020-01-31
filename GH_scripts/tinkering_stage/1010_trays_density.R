@@ -20,22 +20,39 @@ make_grid_sq <- function(r){
 }
 #create hexagon grid
 make_grid_hex <- function(r){
-  hex_points <- spsample(tray, type = "hexagonal", cellsize = r, offset=c(0.1,0.1)) #setting square offset value ensures the same grid is drawn every time. 
+  hex_points <- spsample(tray, type = "hexagonal", cellsize = r, offset=c(0.01,0.01)) #setting square offset value ensures the same grid is drawn every time. 
   hex_grid <- HexPoints2SpatialPolygons(hex_points, dx = r)
   return(hex_grid)
 }
 
 #plot grids
-plot_grid <- function(grid){
+plot_grid <- function(grid, axes=T, ...){
+  
+  #get title information
   x <- coordinates(grid)[,1]
   dist <- x[2]-x[1]
   title <- paste(length(grid), "cells, dist=", dist)
-  plot(tray, col = "grey90", axes = F, main=title)
+  
+  #plot
+  plot(tray, col = "grey90", axes = F, main=title, ...)
   plot(grid, border = "royalblue4", add = T)
   points(coordinates(grid), pch=16, cex=.5, col='black')
+  
+  #put in axes
+  if(axes==T){
+    xs <- unique(sort(round(x, 4)))
+    xs <- xs[seq(1, length(xs), by=2)] #get odds
+    ys <- coordinates(grid)[,2] %>% 
+      round(4) %>% sort %>% unique 
+    axis(1, at=xs, labels=c(1:length(xs)), pos=0, las=2) #bottom
+    axis(3, at=xs, labels=c(1:length(xs)), pos=width, las=2) #top
+    axis(2, at=ys, labels=rev(LETTERS[c(1:length(ys))]), pos=0, las=2) #left
+    axis(4, at=ys, labels=rev(LETTERS[c(1:length(ys))]), pos=width, las=2) #right
+  }else{}
+  
 }
 #plot_grid(make_grid_sq(1))
-#plot_grid(make_grid_hex(1.4))
+#plot_grid(make_grid_hex(1.4), axes = F)
 
 
 #plot distance against # cells
@@ -54,7 +71,7 @@ p1 <- ggplot(dat2, aes(Dist, ncells, color=grid)) +
 
 #envision how the densities may change with the richness levels in your experiment
 richness <- c(1,2,4,6)
-distances <- c(3, 2.4, 1.8, 1.5) #interplanting distances in cm
+distances <- c(2.7, 2.4, 2, 1.75) #interplanting distances in cm
 
 #summarize in df
 names(richness) <- distances #index key for recoding
@@ -63,7 +80,7 @@ dat3 <- dat2 %>%
   mutate(richness = recode(Dist, !!!richness))
 
 #plot
-#ggplot(dat3, aes(richness, ncells, color=grid)) + geom_point() +geom_line()
+ggplot(dat3, aes(richness, ncells, color=grid)) + geom_point() +geom_line() + scale_y_continuous(limits = c(0, max(dat3$ncells)))
 
 #how many seeds is that for 1 whole series of densities? gonna need to order more seeds. for this tinkering around experiment, just do 3 distances. 
 distances2 <- c(3, 2, 1.4)
@@ -76,10 +93,10 @@ dat4 %>% group_by(grid) %>%
             ninoculated = .1*cells_total) 
 
 #Make templates
-#pdf("GH_plots/grid_templates.pdf")
+pdf("GH_plots/grid_templates.pdf")
 #lapply(distances2, function(x) plot_grid(make_grid_sq(x)))
-#lapply(distances2, function(x) plot_grid(make_grid_hex(x)))
-#dev.off()
+lapply(distances, function(x) plot_grid(make_grid_hex(x)))
+dev.off()
 
 #1010 trials planted on 1/14/20----
 #arugula: 1.4, 2, 3, 1.4, 2, 3

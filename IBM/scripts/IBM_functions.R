@@ -3,7 +3,6 @@
 #assume community filled in a hexagonal grid with r interplanting distance with s species, each with p competency. A portion of the communities will be inoculated and the epidemics will spread as a funciton of the community composition (species identity and density). States are C (challenged), S (susceptible), and I (infected). Transmission depends on number, identity, and distance from infected neighbors, as well as susceptibility of recipient host. 
 
 #load packages----
-rm(list=ls())
 require(raster)
 require(tidyverse)
 require(ggplot2)
@@ -61,10 +60,10 @@ make_grid <- function(r, tray){
 #create communities----
 
 #spatial dataframe will be more streamlined. will come from the design from your data. 
-sample_community <- function(nspecies){
+sample_community <- function(nspecies, planting_dist=2){
   #create size of tray and grid
   tray <- make_tray(24.13, 24.13)
-  grid <- make_grid(2, tray) #2 cm interplanting distance
+  grid <- make_grid(r=planting_dist, tray) #2 cm interplanting distance
   
   #how many species
   spp <- spp[1:nspecies]
@@ -89,40 +88,58 @@ sample_community <- function(nspecies){
 
 #define agents dataframe----
 
-#create dataframe that defines ID, coordinates, species ID, state, # infected neighbors, # total neighbors, % infected neighbors, neighbor ID vector. This dataframe will stay stationary through time for the most part, except for state and # and % infected neighbors.
+#create dataframe that defines ID, coordinates, species ID, state. This dataframe will stay stationary through time. 
+#FOR NEAREST NEIGHBOR: as long as you are directly adjacent to infected, interplanting distance doesn't matter. 
+#FOR KERNEL MODEL: you need to know the distance of all indidividuals. Those neighbors will have betas that decay with distance.
 
-make_agents_df <- function(grid_df){
+get_NN <- function(grid_df){
   agents <- grid_df@data
   
   #pairwise adjacency matrix
   adj <- rgeos::gTouches(grid_df, byid = T) 
   
-  #NOTE: if you ever need to, you can create a pairwise distance decay matrix to account for declining transmission with distance. 
-  
-  
-  #make the dataframe
-  #which ones are neighbors
-  agents$adj <- sapply(1:nrow(agents), function(i) {
-    x <- which(adj[row.names(agents)[i],]==T)
-    unname(x)
-  }) 
-  #count how many neighbors
-  agents$n_adj <- unlist(lapply(1:nrow(agents), function(x) length(agents$adj[[x]])))
-  
-  return(agents)
+  return(list(agents=agents, adjacent=adj))
 }
+
+get_pairwise_dist <- function(grid_df, sigma){
+  
+  agents <- grid_df@data
+  
+  #translate a pairwise distance matrix (between centroids!!) into how probabilty of transmission decays with distance. make sure to convert cm to mm
+  pair_dist <- as.matrix(dist(cbind(agents$x, agents$y), diag = T, upper=T)*10)
+  pair_dist2 <- dist_decay(pair_dist, sigma=sigma) #this gets multiplied by its specific beta_ij. low value will decrease tranmsission probability. 
+  diag(pair_dist2) <- 0 #set diagonals to zero. Self can't infect self. 
+  
+  return(list(agents=agents, pair_dist=pair_dist2))
+}
+
+#agents_NN <- get_NN(grid_df)
+#agents_kernel <- get_pairwise_dist(grid_df)
+#head(agents_NN)
+#head(agents_kernel)
+
 
 #rules of spread----
 
 #for every individual, if state==C, then C->C, C->S, or C->I; if state==S, then S->S, or S->I; if state==I, then always stays I. Each transition has a probability and the fate of the transition determined by a value drawn from a uniform distribution between 0 and 1. Will need to loop through every individual every time step. At each time step, record the state of every individual. Output should be a matrix of states, with rows equalling # individuals and cols equalling # time steps. 
 
-IBM <- function(agents){
-  #agents is the data frame that gives info on the individuals
+IBM <- function(spatialgrid_df, Type, spatialdecay=.001){
+  
+  #Type = type of transmission--"NN" or "Kernel". affects which function you run to get agents matrices
+  if(Type=="NN"){
+    agents <- get_NN(spatialgrid_df)
+  }else{ #must be kernel
+    agents <- get_pairwise_dist(spatialgrid_df, sigma=spatialdecay)
+  }
+  
+  #split up the agents list
+  agentsdf <- agents[[1]]
+  agents_neigbors <- agents[[2]]
   
   #define matrix to fill in all the states. nrow=n_IDs, ncol=times
-  states_matrix <- matrix(NA, nrow = nrow(agents), ncol = tfinal)
+  states_matrix <- matrix(NA, nrow = nrow(agentsdf), ncol = tfinal)
   #initiate first time step
-  states_matrix[,1] <- as.character(agents$state)
+  states_matrix[,1] <- as.character(agentsdf$state)
   
   #inoculum decay
   C_to_S <- 1 - exp(-delta) 
@@ -130,36 +147,42 @@ IBM <- function(agents){
   #define function for prob of inoculum to plant transmission
   C_to_Ia <- function(t){
     #alpha_i at time t
-    rate <- alpha_i_t[agents$spID,t]
+    rate <- alpha_i_t[agentsdf$spID,t]
     #rate of transmission C -> I via inoculum
     unname(1 - exp(-(rate))) 
   }
   
   #an array of pairwise transmission matrix
   #fill in the community grid with the beta_ij_t values
-  trans <- beta_ij_t[agents$spID, agents$spID,] #get pairwise betas for all of the individuals given their species identity.
+  #get pairwise betas for all of the individuals given their species identity.
+  trans <- beta_ij_t[agentsdf$spID, agentsdf$spID,] 
+  #account for distance decay or nearest neigbor
+  trans2 <- trans*rep(agents_neigbors, times=dim(trans)[3])
+  
   #change the species names to their IDs
-  colnames(trans) <- rownames(trans) <- agents$ID
+  colnames(trans2) <- rownames(trans2) <- agentsdf$ID
   
   #define function for prob of plant to plant transmission
   C_or_S_to_Ib <- function(t, i){
+    
     #infections happen at the rate: 
-    #e^(-sum_j(beta_ij*(# infected_j)/(total # neighbors)))
-    #sum all of the beta_ij's for all of the infected IDs and divide by total # neighbors. 
-    #beta's of the adjacent plants for a given ID
-    beta_adj <- trans[,,t][agents$ID[i], agents$adj[[i]]]
+    #e^(-sum_j(beta_ij*(# infected_j)))
+    #sum all of the beta_ij's for all of the infected IDs
+    
     #are neighbors are infected?
-    adj_is_I <- states_matrix[,t][agents$adj[[i]]]=="I" 
+    is_I <- states_matrix[,t]=="I" 
+    #beta's of the infected neighbors
+    beta_neighbors <- trans2[i,,t][is_I]
+    
     #rate of transmission from S -> I 
-    1 - exp(-1*sum(beta_adj*adj_is_I)) #number infected
-    #1 - exp(-1*sum(beta_adj*adj_is_I)/agents$n_adj[i]) #proporiton infection
+    1 - exp(-1*sum(beta_neighbors)) #number infected
   }
   
   for(t in 1:(tfinal-1)){ #at every time step
     #get alpha_i(t) (inoculum to plant transmission coef)
     alpha_i <- C_to_Ia(t)
     
-    for(i in 1:nrow(agents)){ #for every individual
+    for(i in 1:nrow(agentsdf)){ #for every individual
       P <- runif(1, 0, 1)#draw random number
       
       if(states_matrix[i,t]=="C"){
@@ -197,7 +220,8 @@ IBM <- function(agents){
 }
 
 #run epidemic----
-#IBM(make_agents_df(sample_grid))
+#IBM(sample_grid, Type="NN") #OR...
+#IBM(sample_grid, Type="Kernel")
 
 
 #visualize----
@@ -213,11 +237,11 @@ plotS_I <- function(IBM_output){
   return(list(df1, p))
 }
 
-#plotS_I(IBM(make_agents_df(sample_grid)))
-
 #now plot spatial map of the spread
-
-plot_spread_map <- function(spatialgrid_df, IBMoutput){
+plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
+  #for plotting
+  pal <- function(spp) RColorBrewer::brewer.pal(n = length(spp), name = "RdYlBu")
+  
   #dataframe matrix of states
   states_dfm <- data.frame(ID = spatialgrid_df$ID, IBMoutput) 
   
@@ -230,7 +254,7 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput){
     #remove state column (it's redundant)
     dplyr::select(-state) %>% 
     #pivot longer by states/time
-    pivot_longer(cols = c(paste0("X", 1:tfinal)), 
+    pivot_longer(cols = c(paste0("X", 1:ncol(IBMoutput))), 
                  names_to = 'time', values_to = 'state') %>% 
     #rename time to be numeric
     mutate(time = as.integer(gsub('X', '', time)) )
@@ -250,18 +274,21 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput){
     geom_polygon(aes(fill = spID)) +
     geom_path(color = "white") +
     coord_equal() +
-    geom_point(data=tmp_centroids, aes(x, y), size = 3, alpha = ifelse(tmp_centroids$state=="I", .5, 0)) +
     scale_fill_manual(values=Colors) +
     labs(x="", y="")
   
-  #takes about 3 minutes
-  animplot <- staticplot + 
-    transition_states(time) +
-    ggtitle('time step {closest_state} of {tfinal}')
+  if(animate==T){
+    #takes about 3 minutes
+    plot <- staticplot + 
+      geom_point(data=tmp_centroids, aes(x, y), size = 3, alpha = ifelse(tmp_centroids$state=="I", .5, 0)) +
+      transition_states(time) +
+      ggtitle('time step {closest_state} of {tfinal}')
+    
+  }else{#plot static plot
+    plot <- staticplot + 
+      geom_point(data=tmp_centroids, aes(x, y), size=4, alpha = ifelse(tmp_centroids$state=="I", .05, 0)) #reduce alpha so it's easier to see
+  }
   
-  return(animplot)
+  return(plot)
 }
-
-#plot_spread_map(sample_grid, IBM(make_agents_df(sample_grid)))
-#anim_save('GH_plots/spread_map.gif') #saves last animation
 
