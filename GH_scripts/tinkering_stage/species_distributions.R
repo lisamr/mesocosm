@@ -191,8 +191,8 @@ dflist_to_sp <- function(i){
   ninoc_sp <- data.frame(ninoc_sp + x)
   
   #get vector for inoculated or not (Challenged or Susceptible)
-  state <- unlist(sapply(1:nrow(ninoc_sp), function(i) c(rep("C", ninoc_sp$Freq[i]), rep("S", tmp$nind[i]-ninoc_sp$Freq[i])) )) 
-  SPdf$state <- state
+  state0 <- unlist(sapply(1:nrow(ninoc_sp), function(i) c(rep("C", ninoc_sp$Freq[i]), rep("S", tmp$nind[i]-ninoc_sp$Freq[i])) )) 
+  SPdf$state0 <- state0
   
   #randomize locations of species. just randomize last three columns
   randomized <- SPdf@data[sample(1:length(SP)),(ncol(SPdf)-3):ncol(SPdf)]
@@ -244,30 +244,31 @@ plot_maps <- function(i){ #i is which tray
   names(Colors) <- levels(tmp_df$spID)
   
   #make a df of centroids to plot inoculated plants. 
-  tmp_centroids <- data.frame(coordinates(tmp), state=tmp$state)
+  tmp_centroids <- data.frame(coordinates(tmp), state0=tmp$state0)
   
   #calculate axis labels
   xs <- unique(sort(round(tmp_centroids$X1, 4)))
   xs <- xs[seq(1, length(xs), by=2)] #get odds
   ys <- tmp_centroids$X2 %>% round(4) %>% sort %>% unique 
+  planting_dist <- xs[2]-xs[1]
   
   #plot in ggplot!
   p1 <- ggplot(data = tmp_df, aes(x=long, y=lat)) +
     geom_polygon(aes(group = group, fill = spID))  +
     geom_path(aes(group = group), color = "white") +
     geom_point(data=tmp_centroids, aes(X1, X2), 
-               alpha=ifelse(tmp_centroids$state=="C", 1, 0)) +
+               alpha=ifelse(tmp_centroids$state0=="C", 1, 0)) +
     coord_equal() +
     scale_fill_manual(values=Colors) +
-    labs(title = paste(paste0('ID', tmp_df$trayID[1], "-"), tmp_df$rand[1], tmp_df$dens[1], paste0('replicate', tmp_df$rep[1]), sep = '-'),
-         subtitle = paste("SD =", tmp_df$SD)) +
+    labs(title = paste(paste0('Tray', tmp_df$trayID[1], "-"), tmp_df$rand[1], tmp_df$dens[1], paste0('replicate', tmp_df$rep[1]), sep = '-'),
+         subtitle = paste("SD =", tmp_df$SD, ', nplants = ', length(tmp), ', spacing = ', planting_dist, 'cm')) +
     scale_x_continuous(name='', breaks=xs, labels=1:length(xs), sec.axis = dup_axis()) +
     scale_y_continuous(name='', breaks=ys, labels=rev(LETTERS[1:length(ys)]), sec.axis = dup_axis())
   
   return(p1)
 }
 
-plot_maps(157)
+plot_maps(11)
 
 
 

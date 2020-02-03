@@ -12,7 +12,8 @@ source('IBM/scripts/IBM_functions.R')
 #functions----
 #for plotting spdf_list objects
 plot_maps <- function(spatialdataframe){ #i is which tray
-  tmp <- spatialdataframe   
+  tmp <- spatialdataframe 
+  
   #make df readable to ggplot
   # add to data a "ID" column for each feature
   tmp$id <- rownames(tmp@data)
@@ -26,23 +27,24 @@ plot_maps <- function(spatialdataframe){ #i is which tray
   names(Colors) <- levels(tmp_df$spID)
   
   #make a df of centroids to plot inoculated plants. 
-  tmp_centroids <- data.frame(coordinates(tmp), state=tmp$state)
+  tmp_centroids <- data.frame(coordinates(tmp), state0=tmp$state0)
   
   #calculate axis labels
   xs <- unique(sort(round(tmp_centroids$X1, 4)))
   xs <- xs[seq(1, length(xs), by=2)] #get odds
   ys <- tmp_centroids$X2 %>% round(4) %>% sort %>% unique 
+  planting_dist <- xs[2]-xs[1]
   
   #plot in ggplot!
   p1 <- ggplot(data = tmp_df, aes(x=long, y=lat)) +
     geom_polygon(aes(group = group, fill = spID))  +
     geom_path(aes(group = group), color = "white") +
     geom_point(data=tmp_centroids, aes(X1, X2), 
-               alpha=ifelse(tmp_centroids$state=="C", 1, 0)) +
+               alpha=ifelse(tmp_centroids$state0=="C", 1, 0)) +
     coord_equal() +
     scale_fill_manual(values=Colors) +
-    labs(title = paste(paste0('ID', tmp_df$trayID[1], "-"), tmp_df$rand[1], tmp_df$dens[1], paste0('replicate', tmp_df$rep[1]), sep = '-'),
-         subtitle = paste("SD =", tmp_df$SD)) +
+    labs(title = paste(paste0('Tray', tmp_df$trayID[1], "-"), tmp_df$rand[1], tmp_df$dens[1], paste0('replicate', tmp_df$rep[1]), sep = '-'),
+         subtitle = paste("SD =", tmp_df$SD, ', nplants = ', length(tmp), ', spacing = ', planting_dist, 'cm')) +
     scale_x_continuous(name='', breaks=xs, labels=1:length(xs), sec.axis = dup_axis()) +
     scale_y_continuous(name='', breaks=ys, labels=rev(LETTERS[1:length(ys)]), sec.axis = dup_axis())
   
@@ -53,7 +55,7 @@ plot_maps <- function(spatialdataframe){ #i is which tray
 bind_treatment_to_states <- function(spatialdataframe, IBM_output){
   
   #summarize state change matrix 
-  sum_states <- function(matrix) cbind(sum(matrix %in% c("S", "C")), sum(matrix =="I"))
+  sum_states <- function(matrix) cbind(sum(matrix %in% c("S", "C")), sum(matrix %in% "I"))
   #put into tall dataframe
   df1 <- data.frame(time=1:ncol(IBM_output), t(apply(IBM_output, 2, sum_states)))
   names(df1) <- c('time', 'S', 'I')
@@ -114,7 +116,7 @@ alpha_i_t <- make_alpha_i_t(comp)
 spdf_list <- readRDS('GH_output/species_distributions/spdf_list.RDS')
 
 #plot one of them
-plot_maps(spdf_list[[10]]) #can take ~30sec. if error, try again.
+plot_maps(spdf_list[[11]]) #can take ~30sec. if error, try again.
 
 #run epidemic----
 
@@ -122,11 +124,11 @@ plot_maps(spdf_list[[10]]) #can take ~30sec. if error, try again.
 
 ptm <- proc.time()# Start the clock!
 IBM_list_NN <- lapply(spdf_list, function(x) IBM(x, "NN") )
-howlongIBM_NN <- proc.time() - ptm# Stop the clock
+howlongIBM_NN <- proc.time() - ptm# 41 seconds
 
 ptm <- proc.time()# Start the clock!
 IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .002) )
-howlongIBM_Kernel <- proc.time() - ptm# Stop the clock
+howlongIBM_Kernel <- proc.time() - ptm# 28 seconds
 beep("mario")
 
 #save IBM output
@@ -140,14 +142,16 @@ IBM_list_Kernel <- readRDS('IBM/outputs/IBM_list_Kernel.RDS')
 #visualize single tray----
 
 #### check out a single tray ####
+trayIDs <- suppressWarnings(lapply(1:length(spdf_list), function(i) (spdf_list[[i]]@data)[1,4:9]) %>% bind_rows())  
+head(trayIDs)
 
 #first plot summary of S and I
-plotS_I(IBM_list_NN[[1]])
-plotS_I(IBM_list_Kernel[[1]])
+plotS_I(IBM_list_NN[[17]])
+plotS_I(IBM_list_Kernel[[17]])
 
-#now plot spatial map of the spread (takes about 3 minutes)
-plot_spread_map(spdf_list[[1]], IBM_list_NN[[1]], animate = F)
-plot_spread_map(spdf_list[[1]], IBM_list_Kernel[[1]], animate = F)
+#now plot spatial map of the spread (animation about a minute)
+plot_spread_map(spdf_list[[17]], IBM_list_NN[[17]], animate = F)
+plot_spread_map(spdf_list[[17]], IBM_list_Kernel[[17]], animate = T)
 #anim_save('GH_plots/spread_map.gif') #saves last animation
 
 #how do treatments affect D-D relationship----
@@ -163,13 +167,13 @@ head(trt_states_df)
 #plot changes in I (#inf and %inf) over time
 filter(trt_states_df, SD==.5) %>% 
   ggplot(., aes(time, I, group=trayID)) +
-  geom_line() +
+  geom_line(alpha=.5, color='dodgerblue4') +
   facet_grid(cols = vars(richness),
              rows = vars(rand, dens))
 
 filter(trt_states_df, SD==.5) %>% 
   ggplot(., aes(time, percI, group=trayID)) +
-  geom_line() +
+  geom_line(alpha=.5, color='dodgerblue4') +
   facet_grid(cols = vars(richness),
              rows = vars(rand, dens))
 
@@ -213,6 +217,14 @@ ggplot(CCsummary2, aes(richness, relCC, color=percI, shape=as.factor(SD))) +
   geom_point() 
 ggplot(CCsummary2, aes(richness, CC, color=percI, shape=as.factor(SD))) +
   geom_point() 
+
+#plot density vs richness for both treatments.
+CCsummary2 %>% 
+  filter(SD==.5) %>% 
+  ggplot(., aes(richness, nind, color=dens)) + 
+  geom_point() + 
+  geom_line() + 
+  scale_y_continuous(limits=c(0,400)) 
 
 
 

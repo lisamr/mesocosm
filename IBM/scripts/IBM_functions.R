@@ -228,7 +228,7 @@ IBM <- function(spatialgrid_df, Type, spatialdecay=.001){
 
 #first plot summary of S and I
 plotS_I <- function(IBM_output){
-  sum_states <- function(data) cbind(sum(data %in% c("S", "C")), sum(data =="I"))
+  sum_states <- function(data) cbind(sum(data %in% c("S", "C")), sum(data %in% "I"))
   df1 <- data.frame(time=1:ncol(IBM_output), t(apply(IBM_output, 2, sum_states)))
   names(df1) <- c('time', 'S', 'I')
   df1 <- pivot_longer(df1, cols=c('S', 'I'), names_to = 'state', values_to = 'count')
@@ -252,7 +252,7 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
     merge(., spatialgrid_df@data, by= "ID") %>% 
     merge(., states_dfm, by = "ID") %>% 
     #remove state column (it's redundant)
-    dplyr::select(-state) %>% 
+    dplyr::select(-state0) %>% 
     #pivot longer by states/time
     pivot_longer(cols = c(paste0("X", 1:ncol(IBMoutput))), 
                  names_to = 'time', values_to = 'state') %>% 
@@ -278,15 +278,16 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
     labs(x="", y="")
   
   if(animate==T){
-    #takes about 3 minutes
+    #takes about a minute
     plot <- staticplot + 
-      geom_point(data=tmp_centroids, aes(x, y), size = 3, alpha = ifelse(tmp_centroids$state=="I", .5, 0)) +
-      transition_states(time) +
+      geom_point(data=tmp_centroids, aes(x, y), size = 3, alpha = ifelse(tmp_centroids$state %in% "I", .5, 0)) +
+      transition_states(time, .5, 1) +
       ggtitle('time step {closest_state} of {tfinal}')
+    plot <- animate(plot, nframes=tfinal, fps=5, duration=10)
     
   }else{#plot static plot
     plot <- staticplot + 
-      geom_point(data=tmp_centroids, aes(x, y), size=4, alpha = ifelse(tmp_centroids$state=="I", .05, 0)) #reduce alpha so it's easier to see
+      geom_point(data=tmp_centroids, aes(x, y), size=4, alpha = ifelse(tmp_centroids$state %in% "I", .05, 0)) #reduce alpha so it's easier to see
   }
   
   return(plot)
