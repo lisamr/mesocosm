@@ -107,7 +107,7 @@ grid_df <- SpatialPolygonsDataFrame(
     ID=row.names(grid),
     x=coordinates(grid)[,1],
     y=coordinates(grid)[,2],
-    spID=sample(c('sp_1', 'sp_2'), length(grid), T, prob = c(1.5,1)),
+    spID=sample(c('sp_1', 'sp_6'), length(grid), T, prob = c(1.5,1)),
     state=sample(c(rep("C", ninoc), rep("S", length(grid)-ninoc)))
   ))
 
@@ -151,7 +151,7 @@ get_pairwise_dist <- function(grid_df, sigma){
 #for every individual, if state==C, then C->C, C->S, or C->I; if state==S, then S->S, or S->I; if state==I, then always stays I. Each transition has a probability and the fate of the transition determined by a value drawn from a uniform distribution between 0 and 1. Will need to loop through every individual every time step. At each time step, record the state of every individual. Output should be a matrix of states, with rows equalling # individuals and cols equalling # time steps. 
 
 IBM <- function(spatialgrid_df, Type, spatialdecay=.001){
-  
+
   #Type = type of transmission--"NN" or "Kernel". affects which function you run to get agents matrices
   if(Type=="NN"){
     agents <- get_NN(spatialgrid_df)
@@ -174,7 +174,7 @@ IBM <- function(spatialgrid_df, Type, spatialdecay=.001){
   #define function for prob of inoculum to plant transmission
   C_to_Ia <- function(t){
     #alpha_i at time t
-    rate <- alpha_i_t[agentsdf$spID,t]
+    rate <- alpha_i_t[as.character(agentsdf$spID),t]
     #rate of transmission C -> I via inoculum
     unname(1 - exp(-(rate))) 
   }
@@ -182,7 +182,7 @@ IBM <- function(spatialgrid_df, Type, spatialdecay=.001){
   #an array of pairwise transmission matrix
   #fill in the community grid with the beta_ij_t values
   #get pairwise betas for all of the individuals given their species identity.
-  trans <- beta_ij_t[agentsdf$spID, agentsdf$spID,] 
+  trans <- beta_ij_t[as.character(agentsdf$spID), as.character(agentsdf$spID),] 
   #account for distance decay or nearest neigbor
   trans2 <- trans*rep(agents_neigbors, times=dim(trans)[3])
 
@@ -272,6 +272,7 @@ plotS_I(testrunKernel)
 #now plot spatial map of the spread
 
 plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
+  
   #for plotting
   pal <- function(spp) RColorBrewer::brewer.pal(n = length(spp), name = "RdYlBu")
   
@@ -300,7 +301,7 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
   
   #add in color id for the species so its the same every time
   Colors <- pal(spp)
-  names(Colors) <- levels(tmp$spID)
+  names(Colors) <- spp
   
   #map it!
   staticplot <- ggplot(data=tmp, aes(long, lat, group = group)) +
@@ -325,7 +326,6 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
   return(plot)
 }
 
-plot_spread_map(grid_df, testrunNN[,1:7], animate = F)
-plot_spread_map(grid_df, testrunKernel, animate = F)
+plot_spread_map(grid_df, testrunKernel, animate = T)
 #anim_save('GH_plots/spread_map.gif') #saves last animation
 

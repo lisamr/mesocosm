@@ -54,3 +54,17 @@ pal <- viridis::plasma(length(distance))
 plot(NULL, xlim=c(0,max(time)), ylim=c(0,.4), xlab="time", ylab='beta(t,x)')
 lapply(1:length(distance), function(x) lines(time, betamatrix[x,], lwd=2, col=pal[x]))
 
+#try 3d plot
+plot_ly(z=~t(betamatrix)) %>% 
+  add_surface() %>% 
+  layout(
+    title = "beta(time, distance)",
+    scene = list(
+      yaxis = list(title = "time (sec)", autorange = "reversed"),
+      xaxis = list(title = "distance (mm)", autorange = "reversed"),
+      zaxis = list(title = "beta (rate of transmission)")
+    ))
+
+
+
+

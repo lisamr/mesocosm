@@ -60,23 +60,23 @@ make_grid <- function(r, tray){
 #create communities----
 
 #spatial dataframe will be more streamlined. will come from the design from your data. 
-sample_community <- function(nspecies, planting_dist=2){
+sample_community <- function(which_spp, perc_inoc=.1, planting_dist=2){
   #create size of tray and grid
   tray <- make_tray(24.13, 24.13)
   grid <- make_grid(r=planting_dist, tray) #2 cm interplanting distance
   
   #how many species
-  spp <- spp[1:nspecies]
+  spp <- spp[which_spp]
   
   #fill community
-  ninoc <- round(.1*length(grid))
+  ninoc <- round(perc_inoc*length(grid))
   grid_df <- SpatialPolygonsDataFrame(
     grid, data.frame(
       ID=row.names(grid),
       x=coordinates(grid)[,1],
       y=coordinates(grid)[,2],
       spID=sample(spp, length(grid), T),
-      state=sample(c(rep("C", ninoc), rep("S", length(grid)-ninoc)))
+      state0=sample(c(rep("C", ninoc), rep("S", length(grid)-ninoc)))
     ))
   
   return(grid_df)
@@ -147,7 +147,7 @@ IBM <- function(spatialgrid_df, Type, spatialdecay=.001){
   #define function for prob of inoculum to plant transmission
   C_to_Ia <- function(t){
     #alpha_i at time t
-    rate <- alpha_i_t[agentsdf$spID,t]
+    rate <- alpha_i_t[as.character(agentsdf$spID),t]
     #rate of transmission C -> I via inoculum
     unname(1 - exp(-(rate))) 
   }
@@ -155,7 +155,7 @@ IBM <- function(spatialgrid_df, Type, spatialdecay=.001){
   #an array of pairwise transmission matrix
   #fill in the community grid with the beta_ij_t values
   #get pairwise betas for all of the individuals given their species identity.
-  trans <- beta_ij_t[agentsdf$spID, agentsdf$spID,] 
+  trans <- beta_ij_t[as.character(agentsdf$spID), as.character(agentsdf$spID),] 
   #account for distance decay or nearest neigbor
   trans2 <- trans*rep(agents_neigbors, times=dim(trans)[3])
   
@@ -267,7 +267,7 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
   
   #add in color id for the species so its the same every time
   Colors <- pal(spp)
-  names(Colors) <- levels(tmp$spID)
+  names(Colors) <- spp
   
   #map it!
   staticplot <- ggplot(data=tmp, aes(long, lat, group = group)) +
@@ -291,5 +291,67 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
   }
   
   return(plot)
+}
+
+#plotting functions after simulation----
+#for plotting spdf_list objects
+plot_maps <- function(spatialdataframe){ #i is which tray
+  tmp <- spatialdataframe 
+  
+  #make df readable to ggplot
+  # add to data a "ID" column for each feature
+  tmp$id <- rownames(tmp@data)
+  # create a data.frame from our spatial object
+  tmp_df <- fortify(tmp, region = "id") %>% 
+    #merge the "fortified" data with attribute data
+    merge(., tmp@data, by = "id")
+  
+  #add in color id for the species so its the same every time
+  Colors <- pal(spp)
+  names(Colors) <- levels(tmp_df$spID)
+  
+  #make a df of centroids to plot inoculated plants. 
+  tmp_centroids <- data.frame(coordinates(tmp), state0=tmp$state0)
+  
+  #calculate axis labels
+  xs <- unique(sort(round(tmp_centroids$X1, 4)))
+  xs <- xs[seq(1, length(xs), by=2)] #get odds
+  ys <- tmp_centroids$X2 %>% round(4) %>% sort %>% unique 
+  planting_dist <- xs[2]-xs[1]
+  
+  #plot in ggplot!
+  p1 <- ggplot(data = tmp_df, aes(x=long, y=lat)) +
+    geom_polygon(aes(group = group, fill = spID))  +
+    geom_path(aes(group = group), color = "white") +
+    geom_point(data=tmp_centroids, aes(X1, X2), 
+               alpha=ifelse(tmp_centroids$state0=="C", 1, 0)) +
+    coord_equal() +
+    scale_fill_manual(values=Colors) +
+    labs(title = paste(paste0('Tray', tmp_df$trayID[1], "-"), tmp_df$rand[1], tmp_df$dens[1], paste0('replicate', tmp_df$rep[1]), sep = '-'),
+         subtitle = paste("SD =", tmp_df$SD, ', nplants = ', length(tmp), ', spacing = ', planting_dist, 'cm')) +
+    scale_x_continuous(name='', breaks=xs, labels=1:length(xs), sec.axis = dup_axis()) +
+    scale_y_continuous(name='', breaks=ys, labels=rev(LETTERS[1:length(ys)]), sec.axis = dup_axis())
+  
+  return(p1)
+}
+
+#bind the IBM output (state changes) to the treatment attribute data. 
+bind_treatment_to_states <- function(spatialdataframe, IBM_output){
+  
+  #summarize state change matrix 
+  sum_states <- function(matrix) cbind(sum(matrix %in% c("S", "C")), sum(matrix %in% "I"))
+  #put into tall dataframe
+  df1 <- data.frame(time=1:ncol(IBM_output), t(apply(IBM_output, 2, sum_states)))
+  names(df1) <- c('time', 'S', 'I')
+  #df1 <- pivot_longer(df1, cols=c('S', 'I'), names_to = 'state', values_to = 'count')
+  
+  #bind treatment to state changes
+  treatment <- spatialdataframe@data[1,] %>% select(trayID, rand, dens, richness, rep, SD)
+  row.names(treatment) <- NULL
+  
+  df2 <- cbind(treatment, df1)
+  df2 <- df2 %>% mutate(percI = I/(S+I))
+  
+  return(df2)
 }
 

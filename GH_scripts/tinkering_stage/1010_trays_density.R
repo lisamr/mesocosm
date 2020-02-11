@@ -71,7 +71,7 @@ p1 <- ggplot(dat2, aes(Dist, ncells, color=grid)) +
 
 #envision how the densities may change with the richness levels in your experiment
 richness <- c(1,2,4,6)
-distances <- c(2.7, 2.4, 2, 1.75) #interplanting distances in cm
+distances <- c(2.85, 2.25, 1.75, 1.55) #interplanting distances in cm #2.9, 2.4, 2, 1.75
 
 #summarize in df
 names(richness) <- distances #index key for recoding
@@ -153,6 +153,38 @@ pdf("GH_plots/1010trial_inoc_maps.pdf")
 set.seed(1)
 for(i in 1:nrow(dat5)){
   plot_grid_inoc(r=dat5$distances[i], sub=dat5$species[i])
+}
+dev.off()
+
+#print maps for mom's cricket die cut
+plot_grid_cricket <- function(r, ...){
+  #data
+  gridh <- make_grid_hex(r)
+  #select which individuals get inoculated
+  n_inoc <- round(length(gridh)*1)
+  samp <- sample(1:length(gridh), n_inoc)
+  #get title information
+  x <- coordinates(gridh)[,1]
+  dist <- x[2]-x[1]
+  title <- paste(length(gridh), "cells, dist between dots=", dist, 'cm')
+  #plot
+  plot(tray, main=title, col='white', ...)
+  plot(gridh, border = "black", add = T)
+  points(coordinates(gridh[samp]), pch=16, cex=.5, col='black')
+  #put in axes
+  #xs <- unique(sort(round(x, 4)))
+  #xs <- xs[seq(1, length(xs), by=2)] #get odds
+  #ys <- coordinates(gridh)[,2] %>% round(4) %>% sort %>% unique 
+  #axis(1, at=xs, labels=c(1:length(xs)), pos=0, las=2) #bottom
+  #axis(3, at=xs, labels=c(1:length(xs)), pos=width, las=2) #top
+  #axis(2, at=ys, labels=rev(LETTERS[c(1:length(ys))]), pos=0, las=2) #left
+  #axis(4, at=ys, labels=rev(LETTERS[c(1:length(ys))]), pos=width, las=2) #right
+}
+dat3.1 <- filter(dat3, grid=='hex')
+head(dat3.1)
+pdf("GH_plots/cricket_diecut_border.pdf")
+for(i in 1:nrow(filter(dat3, grid=='hex'))){
+  plot_grid_cricket(r=dat3.1$Dist[i])
 }
 dev.off()
 

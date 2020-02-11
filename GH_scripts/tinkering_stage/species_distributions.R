@@ -14,8 +14,8 @@ length <- width
 
 #initial design pars
 richness <- c(1,2,4,6)
-Dist <- c(2.7, 2.4, 2, 1.75) #interplanting distances
-Sub <- data.frame(dens="sub", Dist=1.8, ncells=208, richness)#values informed by hexagon grid below.
+Dist <- c(2.85, 2.25, 1.75, 1.55) #interplanting distances
+Sub <- data.frame(dens="sub", Dist=1.75, ncells=224, richness)#values informed by hexagon grid below.
 nreps <- 10
 comp <- c(1, .3, .2, .1, .001, 0) #vector of relative "competencies". have to differentiate sp5 and 6 somehow.
 pinoc <- .1 #percent inoculated at start of experiemnt
@@ -212,20 +212,41 @@ ggplot(design, aes(richness, ncells, color=dens)) +
   geom_point() + 
   geom_line() + 
   scale_y_continuous(limits=c(0,400)) 
+ggsave('GH_plots/species_distributions/density_richness.pdf')
+
+#change rand and dens names for plotting
+rand.labs <- c('deterministic', 'stochastic')
+names(rand.labs) <- c('det', 'stoch')
+dens.labs <- c("additive", "substitutive")
+names(dens.labs) <- c("add", "sub")
 
 #figure of design with 4 treatments
-ggplot(filter(design_orig, rep==1), aes(richness, nind, group=fct_rev(species), fill=species))+
+ggplot(filter(design_orig, rep==2), aes(richness, nind, group=fct_rev(species), fill=species))+
   geom_col()+
-  facet_wrap(~rand+dens)+
+  facet_wrap(~rand+dens, labeller = labeller(rand=rand.labs, dens=dens.labs))+
   scale_fill_manual(values=pal)
+ggsave('GH_plots/species_distributions/design_4trtments.pdf', width = 7, height = 4.5)
 
 #plot community competency against richness
+#plot 1
 design_augmented %>% 
   group_by(rep, rand, dens, richness, SD) %>% 
-  summarise(CC = sum(nind*comp)/sum(nind)) %>% 
+  summarise(CC = sum(nind*comp), 
+            avgCC = sum(nind*comp)/sum(nind)) %>% 
+  ggplot(., aes(richness, avgCC, color=as.factor(ifelse(SD==.5, "original", "augmented")))) +
+  geom_point(alpha=.5) +
+  labs(color="dataset", y='average host competency')
+ggsave('GH_plots/species_distributions/avghostcomp_richness.pdf')
+#plot2
+design_augmented %>% 
+  group_by(rep, rand, dens, richness, SD) %>% 
+  summarise(CC = sum(nind*comp), 
+            avgCC = sum(nind*comp)/sum(nind)) %>% 
   ggplot(., aes(richness, CC, color=as.factor(ifelse(SD==.5, "original", "augmented")))) +
   geom_point(alpha=.5) +
-  labs(color="dataset", y='relative community competency')
+  labs(color="dataset", y='Total community competency')
+ggsave('GH_plots/species_distributions/comcomp_richness.pdf')
+
 
 #plot maps of trays with ggplot
 names(dflist) #ID of the maps
@@ -268,8 +289,25 @@ plot_maps <- function(i){ #i is which tray
   return(p1)
 }
 
-plot_maps(11)
+#check out a tray
+plot_maps(17)
 
+#plot 14 to 17 showing det/sub series
+blank_theme <- theme(title = element_blank(), legend.position="none", axis.text = element_blank(), axis.ticks = element_blank())
+tray14 <- plot_maps(14)+ blank_theme
+tray15 <- plot_maps(15)+ blank_theme
+tray16 <- plot_maps(16)+ blank_theme
+tray17 <- plot_maps(17)+ blank_theme
+cowplot::plot_grid(tray14, tray15, tray16, tray17)
+ggsave('GH_plots/species_distributions/four_maps_detsub.pdf', width = 7, height = 7)
+
+#plot 26 to 29 showing det/add series
+tray26 <- plot_maps(26)+ blank_theme
+tray27 <- plot_maps(27)+ blank_theme
+tray28 <- plot_maps(28)+ blank_theme
+tray29 <- plot_maps(29)+ blank_theme
+cowplot::plot_grid(tray26, tray27, tray28, tray29)
+ggsave('GH_plots/species_distributions/four_maps_detadd.pdf', width = 7, height = 7)
 
 
 #export----

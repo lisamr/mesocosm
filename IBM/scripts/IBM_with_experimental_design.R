@@ -5,71 +5,7 @@
 rm(list=ls())
 
 #load source code----
-library(beepr)
 source('IBM/scripts/IBM_functions.R')
-
-
-#functions----
-#for plotting spdf_list objects
-plot_maps <- function(spatialdataframe){ #i is which tray
-  tmp <- spatialdataframe 
-  
-  #make df readable to ggplot
-  # add to data a "ID" column for each feature
-  tmp$id <- rownames(tmp@data)
-  # create a data.frame from our spatial object
-  tmp_df <- fortify(tmp, region = "id") %>% 
-    #merge the "fortified" data with attribute data
-    merge(., tmp@data, by = "id")
-  
-  #add in color id for the species so its the same every time
-  Colors <- pal(spp)
-  names(Colors) <- levels(tmp_df$spID)
-  
-  #make a df of centroids to plot inoculated plants. 
-  tmp_centroids <- data.frame(coordinates(tmp), state0=tmp$state0)
-  
-  #calculate axis labels
-  xs <- unique(sort(round(tmp_centroids$X1, 4)))
-  xs <- xs[seq(1, length(xs), by=2)] #get odds
-  ys <- tmp_centroids$X2 %>% round(4) %>% sort %>% unique 
-  planting_dist <- xs[2]-xs[1]
-  
-  #plot in ggplot!
-  p1 <- ggplot(data = tmp_df, aes(x=long, y=lat)) +
-    geom_polygon(aes(group = group, fill = spID))  +
-    geom_path(aes(group = group), color = "white") +
-    geom_point(data=tmp_centroids, aes(X1, X2), 
-               alpha=ifelse(tmp_centroids$state0=="C", 1, 0)) +
-    coord_equal() +
-    scale_fill_manual(values=Colors) +
-    labs(title = paste(paste0('Tray', tmp_df$trayID[1], "-"), tmp_df$rand[1], tmp_df$dens[1], paste0('replicate', tmp_df$rep[1]), sep = '-'),
-         subtitle = paste("SD =", tmp_df$SD, ', nplants = ', length(tmp), ', spacing = ', planting_dist, 'cm')) +
-    scale_x_continuous(name='', breaks=xs, labels=1:length(xs), sec.axis = dup_axis()) +
-    scale_y_continuous(name='', breaks=ys, labels=rev(LETTERS[1:length(ys)]), sec.axis = dup_axis())
-  
-  return(p1)
-}
-
-#bind the IBM output (state changes) to the treatment attribute data. 
-bind_treatment_to_states <- function(spatialdataframe, IBM_output){
-  
-  #summarize state change matrix 
-  sum_states <- function(matrix) cbind(sum(matrix %in% c("S", "C")), sum(matrix %in% "I"))
-  #put into tall dataframe
-  df1 <- data.frame(time=1:ncol(IBM_output), t(apply(IBM_output, 2, sum_states)))
-  names(df1) <- c('time', 'S', 'I')
-  #df1 <- pivot_longer(df1, cols=c('S', 'I'), names_to = 'state', values_to = 'count')
-  
-  #bind treatment to state changes
-  treatment <- spatialdataframe@data[1,] %>% select(trayID, rand, dens, richness, rep, SD)
-  row.names(treatment) <- NULL
-  
-  df2 <- cbind(treatment, df1)
-  df2 <- df2 %>% mutate(percI = I/(S+I))
-  
-  return(df2)
-}
 
 #parameters----
 #tray dimensions
@@ -116,7 +52,7 @@ alpha_i_t <- make_alpha_i_t(comp)
 spdf_list <- readRDS('GH_output/species_distributions/spdf_list.RDS')
 
 #plot one of them
-plot_maps(spdf_list[[11]]) #can take ~30sec. if error, try again.
+plot_maps(spdf_list[[11]]) #can take ~15sec. if error, try again.
 
 #run epidemic----
 
@@ -124,12 +60,11 @@ plot_maps(spdf_list[[11]]) #can take ~30sec. if error, try again.
 
 ptm <- proc.time()# Start the clock!
 IBM_list_NN <- lapply(spdf_list, function(x) IBM(x, "NN") )
-howlongIBM_NN <- proc.time() - ptm# 41 seconds
+howlongIBM_NN <- proc.time() - ptm# 67 seconds
 
 ptm <- proc.time()# Start the clock!
-IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .002) )
-howlongIBM_Kernel <- proc.time() - ptm# 28 seconds
-beep("mario")
+IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .001) )
+howlongIBM_Kernel <- proc.time() - ptm# 38 seconds
 
 #save IBM output
 saveRDS(IBM_list_NN, 'IBM/outputs/IBM_list_NN.RDS')
@@ -146,13 +81,16 @@ trayIDs <- suppressWarnings(lapply(1:length(spdf_list), function(i) (spdf_list[[
 head(trayIDs)
 
 #first plot summary of S and I
-plotS_I(IBM_list_NN[[17]])
-plotS_I(IBM_list_Kernel[[17]])
+plotS_I(IBM_list_NN[[1]])
+plotS_I(IBM_list_Kernel[[2]])
+plotS_I(IBM_list_Kernel[[1]])
 
 #now plot spatial map of the spread (animation about a minute)
-plot_spread_map(spdf_list[[17]], IBM_list_NN[[17]], animate = F)
-plot_spread_map(spdf_list[[17]], IBM_list_Kernel[[17]], animate = T)
-#anim_save('GH_plots/spread_map.gif') #saves last animation
+plot_spread_map(spdf_list[[1]], IBM_list_NN[[1]], animate = F)
+plot_spread_map(spdf_list[[27]], IBM_list_Kernel[[27]], animate = T)
+plot_spread_map(spdf_list[[60]], IBM_list_Kernel[[60]], animate = T)
+
+#anim_save('IBM/plots/spread_map_detadd4.gif') #saves last animation
 
 #how do treatments affect D-D relationship----
 
@@ -170,25 +108,30 @@ filter(trt_states_df, SD==.5) %>%
   geom_line(alpha=.5, color='dodgerblue4') +
   facet_grid(cols = vars(richness),
              rows = vars(rand, dens))
+ggsave('IBM/plots/I_over_time_Kernel.pdf')
 
 filter(trt_states_df, SD==.5) %>% 
   ggplot(., aes(time, percI, group=trayID)) +
   geom_line(alpha=.5, color='dodgerblue4') +
   facet_grid(cols = vars(richness),
              rows = vars(rand, dens))
+ggsave('IBM/plots/percI_over_time_Kernel.pdf')
 
 #plot I (#inf and %inf) at final time step
-trt_states_df %>% filter(time==tfinal, SD==.5) %>% 
+p1 <- trt_states_df %>% filter(time==tfinal, SD==.5) %>% 
   ggplot(., aes(richness, I, group = rep)) +
   geom_line(alpha=.5, color='dodgerblue4') +
   facet_grid(cols = vars(dens),
              rows = vars(rand))
 
-trt_states_df %>% filter(time==tfinal, SD==.5) %>% 
+p2 <- trt_states_df %>% filter(time==tfinal, SD==.5) %>% 
   ggplot(., aes(richness, percI, group = rep)) +
   geom_line(alpha=.5, color='dodgerblue4') +
   facet_grid(cols = vars(dens),
              rows = vars(rand))
+
+cowplot::plot_grid(p1, p2, labels = c("A", "B"))
+ggsave('IBM/plots/disease_tfinal_Kernel.pdf', width = 10, height = 4.5)
 
 #Community competency----
 #community competency can be calculated before the simulation runs
@@ -210,7 +153,9 @@ ggplot(CCsummary2, aes(relCC, percI, color=nind)) +
   geom_point() +
   scale_color_viridis_c()
 ggplot(CCsummary2, aes(CC, I, color=richness)) +
-  geom_point() 
+  geom_point() +
+  labs(x='community competency', y='number infected')
+ggsave('IBM/plots/CC_I.pdf')
 
 #plot CC vs richness
 ggplot(CCsummary2, aes(richness, relCC, color=percI, shape=as.factor(SD))) +

@@ -49,11 +49,10 @@ beta_ij_t <- make_beta_ij_t(comp)
 alpha_i_t <- make_alpha_i_t(comp)
 
 #create community----
-#I created a sample community in the IBM source code. It's a simple 2 species community. However, you'll likely want to make your own. 
-sample_grid <- sample_community(nspecies = 1, planting_dist = 1)
 
-#quick plot
-plot(sample_grid) + text(coordinates(sample_grid), cex=.5, col=as.numeric(sample_grid$spID))
+#I created a sample community in the IBM source code. It's a simple 2 species community. However, you'll likely want to make your own. 
+sample_grid <- sample_community(which_spp = 2, perc_inoc = .01, planting_dist = 1)
+
 
 
 #run epidemic----
@@ -63,8 +62,8 @@ plot(sample_grid) + text(coordinates(sample_grid), cex=.5, col=as.numeric(sample
 #try out transmission with nearest neighbor only infections and ones with distance decay (kernel) on two communities with different densities
 
 #communities
-samplegrid1 <- sample_community(1, 1) #planting dist=1cm
-samplegrid2 <- sample_community(1, 2) #planting dist=2cm
+samplegrid1 <- sample_community(1, .01, 1) #species 1
+samplegrid2 <- sample_community(6, .01, 1) #species 6
 
 #simulate!
 testrunNN1 <- IBM(samplegrid1, Type = "NN")
@@ -74,6 +73,7 @@ testrunKernel2 <- IBM(samplegrid2, Type = "Kernel", spatialdecay = .002)
 
 #view
 head(testrunNN1); head(testrunKernel1)
+head(testrunNN2); head(testrunKernel2)
 
 #visualize----
 
@@ -86,7 +86,7 @@ cowplot::plot_grid(p1, p2, p3, p4, labels = c('NN1', 'NN2', 'Kernel1', 'Kernel2'
 
 
 #now plot spatial map of the spread (animation is ~3 minutes)
-plot_spread_map(samplegrid2, testrunNN2, animate = F)
-plot_spread_map(samplegrid2, testrunKernel2, animate = F)
+plot_spread_map(samplegrid1, testrunNN1, animate = F)
+plot_spread_map(samplegrid1, testrunKernel1, animate = T)
 #anim_save('IBM/plots/spread_map.gif') #saves last animation
 
