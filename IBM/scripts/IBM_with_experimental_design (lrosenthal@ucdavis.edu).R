@@ -144,16 +144,9 @@ CCsummary <- binded_spdf %>%
 #merge Com Comp summary with infection data
 CCsummary2 <- trt_states_df %>% 
   filter(time==tfinal) %>% 
-  select(trayID, I, percI, SD, rep) %>% 
+  select(trayID, I, percI, SD) %>% 
   left_join(CCsummary, ., by = "trayID") 
-
-#do a round about way to give each species order an index variable
-CCsummary2$sp_order <- cumsum(!duplicated(CCsummary2[c('rep', 'SD', 'rand', 'dens')]))
-CCsummary2 <- CCsummary2 %>% 
-  mutate(sp_order = ifelse(rand=="det", 1, sp_order)) 
-key <- 1:length(unique(CCsummary2$sp_order))
-names(key) <- unique(CCsummary2$sp_order)
-CCsummary2$sp_order <- as.factor(recode(as.factor(CCsummary2$sp_order), !!!key)) 
+head(CCsummary2)
 
 #plot CC vs infections
 ggplot(CCsummary2, aes(relCC, percI, color=nind)) +
@@ -168,10 +161,6 @@ ggplot(CCsummary2, aes(CC, percI, color=richness)) +
   labs(x='community competency', y='% infected') +
   scale_color_viridis_c()
 ggsave('IBM/plots/CC_percI.pdf')
-ggplot(CCsummary2, aes(CC, percI, color=sp_order)) +
-  geom_point() +
-  labs(x='community competency', y='% infected') +
-  scale_color_viridis_d()
 
 #plot CC vs richness
 ggplot(CCsummary2, aes(richness, relCC, color=percI, shape=as.factor(SD))) +
@@ -188,8 +177,6 @@ CCsummary2 %>%
   scale_y_continuous(limits=c(0,400)) 
 
 #statistics----
-#the following is to analyze question 3: is species composition or richness more important in predicting disease? 
-
 #load stuff
 dens <- function(x, ...) plot(density(x), ...)
 inv_logit <- function(x) exp(x)/(1+exp(x))
@@ -206,7 +193,6 @@ head(CCsummary2)
 #scale the predictors too.
 CCsummary3 <- CCsummary2
 CCsummary3$relCC <- Scale(CCsummary3$relCC)
-CCsummary3$richness.fct <- as.factor(CCsummary3$richness)
 CCsummary3$richness <- Scale(CCsummary3$richness)
 CCsummary3$nind_scaled <- Scale(CCsummary3$nind)
 CCsummary3$CC <- Scale(CCsummary3$CC)
@@ -215,40 +201,30 @@ CCsummary3$CC <- Scale(CCsummary3$CC)
 f1 <- bf(I | trials(nind) ~ relCC + richness + nind, family = binomial)
 f1s <- bf(I | trials(nind) ~ relCC + richness + nind_scaled, family = binomial)
 f2s <- bf(I | trials(nind) ~ CC + richness, family = binomial)
-f3s <- bf(I | trials(nind) ~ -1 + CC + richness.fct, family = binomial)
-f4 <- bf(I | trials(nind) ~ CC + richness + (1|sp_order), family = binomial)
 
 #get prior
-get_prior(f4, CCsummary3)
-#figure out prior. want something flat for intercept, centered around .5 for 'treatments'
-rnorm(1000, 0, 1.5) %>% inv_logit %>% dens(xlim=c(0,1))
-rnorm(1000, 0, .5) %>% inv_logit %>% dens(xlim=c(0,1))
-rexp(1000, 1) %>% dens()
+get_prior(f1, CCsummary2)
+#figure out prior. want something flat.
+rnorm(1000, 0, 1.5) %>% inv_logit %>% dens
 
 #set prior
 priors1 <- c(set_prior('normal(0,1.5)', class="Intercept"),
              set_prior('normal(0,.5)', class="b"))
-priors3 <- c(set_prior('normal(0,.5)', class="b"))
-priors4 <- c(set_prior('normal(0,1.5)', class="Intercept"),
-             set_prior('normal(0,.5)', class="b"),
-             set_prior('exponential(1)', class='sd'))
 
 #binomial model
 fit1 <- brm(formula = f1, data = CCsummary2, prior = priors1, family = binomial,chains = 4, cores = 4)
 fit1s <- brm(formula = f1s, data = CCsummary3, prior = priors1, family = binomial,chains = 4, cores = 4)
 fit2s <- brm(formula = f2s, data = CCsummary3, prior = priors1, family = binomial,chains = 4, cores = 4) #what I used in my ppt
-fit3s <- brm(formula = f3s, data = CCsummary3, prior = priors3, family = binomial,chains = 4, cores = 4) #richness as a factor. doesn't change results and makes interpretation harder.
-fit4 <- brm(formula = f4, data = CCsummary3, prior = priors4, family = binomial,chains = 4, cores = 4)#random effect doesn't help with fit. 
 
 #check out model
-model=fit4
-pp_check(model, nsamples = 100)#fit3s is marginally, but still not great. overpredicting infections in low densities, underpredicting in medium densities. 
+model=fit2s
+pp_check(model, nsamples = 100)#fit2s is best, but still not great
 pp_check(model, type = 'intervals')#looks like the model is too confident 
 
 #coef plot
 get_variables(model)
 coefs <- model %>% 
-  gather_draws(b_CC, b_richness.fct1, b_richness.fct2, b_richness.fct4, b_richness.fct6)
+  gather_draws(b_Intercept, b_CC, b_richness)
 #create summary table
 coefs_sum <- coefs %>% mean_hdci()
 #plot
@@ -260,12 +236,11 @@ ggplot(coefs_sum, aes(.variable, .value)) +
 
 #predictions
 newd_CC <- expand.grid(CC=seq(-2,2,length.out = 100), nind=100, richness=c(unique(CCsummary3$richness)))
-newd_CC <- expand.grid(CC=seq(-2,2,length.out = 100), nind=100, richness.fct=c(1,2,4,6))
 fitted_CC <- add_fitted_draws(newd_CC, model)
 pred_CC <- add_predicted_draws(newd_CC, model)
 
 #manually calculate HDPI of the predictions and fit, then plot. will help diagnose and be faster.
-fitbounds_CC <- median_hdci(fitted_CC) 
+fitbounds_CC <- median_hdci(fitted_CC)
 predbounds_CC <- median_hdci(pred_CC)
 #plot
 ggplot(fitbounds_CC, aes(CC, .value/100, group=richness)) +
@@ -278,14 +253,6 @@ ggplot(fitbounds_CC, aes(CC, .value/100, group=richness)) +
   scale_fill_viridis_c()
 ggsave('IBM/plots/predictions_infections_brms.pdf')
 
-ggplot(fitbounds_CC, aes(CC, .value/100, group=as.factor(richness.fct))) +
-  geom_line(aes(color=as.factor(richness.fct)))+
-  geom_ribbon(data=predbounds_CC, aes(y=.prediction/100, ymin = .lower/100, ymax = .upper/100, fill=as.factor(richness.fct)), alpha=.2) +
-  #geom_ribbon(aes(ymin = .lower/100, ymax = .upper/100), alpha=.5, fill='black') +
-  #geom_point(data=CCsummary2, aes(Scale(CC), percI, color=richness), alpha=.8) +
-  labs(x='scaled community competency', y='pr(infected)')+
-  scale_color_viridis_d()+
-  scale_fill_viridis_d()
 
 
 
