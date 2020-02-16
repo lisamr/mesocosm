@@ -49,10 +49,11 @@ alpha_i_t <- make_alpha_i_t(comp)
 
 #create community----
 #read in list of spatial polygons dataframes for each tray
-spdf_list <- readRDS('GH_output/species_distributions/spdf_list.RDS')
+#spdf_list <- readRDS('GH_output/species_distributions/spdf_list.RDS')
+spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
 
 #plot one of them
-plot_maps(spdf_list[[11]]) #can take ~15sec. if error, try again.
+plot_maps(spdf_list[[16]]) #can take ~15sec. if error, try again.
 
 #run epidemic----
 
@@ -63,7 +64,7 @@ IBM_list_NN <- lapply(spdf_list, function(x) IBM(x, "NN") )
 howlongIBM_NN <- proc.time() - ptm# 67 seconds
 
 ptm <- proc.time()# Start the clock!
-IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .001) )
+IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .0025) )#spatialdecay=.001 in paper, but more likely .0025 in your system.
 howlongIBM_Kernel <- proc.time() - ptm# 38 seconds
 
 #save IBM output
@@ -82,13 +83,14 @@ head(trayIDs)
 
 #first plot summary of S and I
 plotS_I(IBM_list_NN[[1]])
-plotS_I(IBM_list_Kernel[[2]])
 plotS_I(IBM_list_Kernel[[1]])
 
 #now plot spatial map of the spread (animation about a minute)
-plot_spread_map(spdf_list[[1]], IBM_list_NN[[1]], animate = F)
-plot_spread_map(spdf_list[[15]], IBM_list_Kernel[[15]], animate = T)
-plot_spread_map(spdf_list[[17]], IBM_list_Kernel[[17]], animate = T)
+#154-157 is add/det; 158-161 is sub/det
+plot_spread_map(spdf_list[[154]], IBM_list_Kernel[[154]], animate = F)
+plot_spread_map(spdf_list[[155]], IBM_list_Kernel[[155]], animate = F)
+plot_spread_map(spdf_list[[156]], IBM_list_Kernel[[156]], animate = F)
+plot_spread_map(spdf_list[[157]], IBM_list_Kernel[[157]], animate = F)
 
 #anim_save('IBM/plots/spread_map_detsub6.gif') #saves last animation
 
@@ -195,10 +197,103 @@ dens <- function(x, ...) plot(density(x), ...)
 inv_logit <- function(x) exp(x)/(1+exp(x))
 logit <- function(x) log(x/(1-x))
 Scale <- function(x){
-  (x-mean(x))/sd(x)
+  (x-mean(x))/(2*sd(x))
 }
 library(brms)
 library(tidybayes)
+
+#going to do a bernoulli trial, so need data on individuals. fuck, it's >38000 individuals. OMG. ugh.
+ind_trials <- suppressWarnings(bind_rows(lapply(1:length(spdf_list), function(i) track_individuals(spdf_list[[i]], IBM_list_Kernel[[i]])))) 
+ind_trials$infected <- ifelse(ind_trials$state_tf=="I", 1, 0)
+ind_trials$trayID <- as.factor(ind_trials$trayID)
+
+#scale your variables. really helps with the sampler.
+ind_trials$avgCC.s <- Scale(ind_trials$avgCC)
+ind_trials$richness.s <- Scale(ind_trials$richness)
+ind_trials$density.s <- Scale(ind_trials$density)
+ind_trials$nsp1.s <- Scale(ind_trials$nsp1)
+
+#set formula
+f1 <- bf(infected ~ avgCC.s + richness.s + density.s + (1|trayID), family = bernoulli)
+f2 <- bf(infected ~  richness.s + nsp1.s + (1|trayID), family = bernoulli)
+
+#set priors (probably need to fiddle)
+get_prior(f2, ind_trials)
+priors1 <- c(set_prior('normal(0,1.5)', class="Intercept"),
+             set_prior('normal(0,.5)', class="b"),
+             set_prior('exponential(1)', class='sd'))
+
+#run the model
+ptm <- proc.time()# Start the clock!
+fit1 <- brm(formula = f1, data = ind_trials, prior = priors1, chains = 3, cores = 4)
+fit1 <- add_criterion(fit1, 'loo')
+howlongfit1 <-proc.time() - ptm # 827sec
+#saveRDS(fit1, 'IBM/outputs/fit1_bernoulli.RDS')
+ptm <- proc.time()# Start the clock!
+fit2 <- brm(formula = f2, data = ind_trials, prior = priors1, chains = 3, cores = 4)
+fit2 <- add_criterion(fit2, 'loo')
+howlongfit2 <-proc.time() - ptm # 
+#saveRDS(fit2, 'IBM/outputs/fit2_bernoulli.RDS')
+
+#contrast models
+print(loo_compare(fit1, fit2), simplify=F) #nominally better.
+
+#assess fit
+model=fit1
+pp_check(model, nsamples = 100)#looks pretty spot on. takes a while.
+
+#look at coefficents
+#coef plot
+get_variables(model)
+coefs <- model %>% gather_draws(b_richness.s, b_nsp1.s, sd_trayID__Intercept)
+coefs <- model %>% gather_draws(b_avgCC.s, b_richness.s, b_density.s, sd_trayID__Intercept)
+#create summary table
+coefs_sum <- coefs %>% mean_hdci()
+#plot
+ggplot(coefs_sum, aes(.variable, .value)) +
+  geom_pointinterval(position = position_dodge(width = .2), size=1) +
+  geom_hline(yintercept = 0, lty=2) +
+  labs(x='variable', y='parameter value') +
+  theme(text=element_text(size=16))
+ggsave('IBM/plots/coef_plot_fit1.pdf')
+
+#check out the tray random variables
+#look at distribution
+model %>% 
+  gather_draws(r_trayID[i,]) %>% 
+  filter(.draw<50) %>% 
+  ggplot(., aes(i, .value)) +
+  geom_point(size=.2)
+#probably want to regress against your predictors, but can play with that later.
+
+#predictions
+newd_CC <- expand.grid(avgCC.s=seq(-1,1,length.out = 50), density.s=seq(-1,1,length.out = 5), richness.s=0, trayID=1)
+fitted_CC <- add_fitted_draws(newd_CC, model)
+pred_CC <- add_predicted_draws(newd_CC, model)
+
+#manually calculate HDPI of the predictions and fit, then plot. will help diagnose and be faster.
+fitbounds_CC <- median_hdci(fitted_CC) 
+predbounds_CC <- median_hdci(pred_CC)
+#plot
+ggplot(fitbounds_CC, aes(avgCC.s, .value,group=density.s, fill=density.s)) +
+  geom_line()+
+  #geom_ribbon(data=predbounds_CC, aes(y=.prediction, ymin = .lower, ymax = .upper, fill=richness.s), alpha=.2) +
+  geom_ribbon(aes(ymin = .lower, ymax = .upper), alpha=.5) +
+  #geom_point(data=CCsummary2, aes(Scale(CC), percI, color=richness), alpha=.8) +
+  labs(x='scaled avg. host competency', y='pr(infected)')+
+  scale_color_viridis_c()+
+  scale_fill_viridis_c()
+ggsave('IBM/plots/predictions_infections_bernouillifit1.pdf')
+
+
+
+
+
+
+
+
+#statistics2----
+#below I used an aggregated form of data to see the relative effects of richness and community competency on infections. The bernoulli trials are better.
 
 #analyze relative effects of richness, host competency, and density on probability of infections
 head(CCsummary2)
@@ -230,7 +325,7 @@ priors1 <- c(set_prior('normal(0,1.5)', class="Intercept"),
              set_prior('normal(0,.5)', class="b"))
 priors3 <- c(set_prior('normal(0,.5)', class="b"))
 priors4 <- c(set_prior('normal(0,1.5)', class="Intercept"),
-             set_prior('normal(0,.5)', class="b"),
+             set_prior('normal(0,1.5)', class="b"),
              set_prior('exponential(1)', class='sd'))
 
 #binomial model
@@ -238,7 +333,7 @@ fit1 <- brm(formula = f1, data = CCsummary2, prior = priors1, family = binomial,
 fit1s <- brm(formula = f1s, data = CCsummary3, prior = priors1, family = binomial,chains = 4, cores = 4)
 fit2s <- brm(formula = f2s, data = CCsummary3, prior = priors1, family = binomial,chains = 4, cores = 4) #what I used in my ppt
 fit3s <- brm(formula = f3s, data = CCsummary3, prior = priors3, family = binomial,chains = 4, cores = 4) #richness as a factor. doesn't change results and makes interpretation harder.
-fit4 <- brm(formula = f4, data = CCsummary3, prior = priors4, family = binomial,chains = 4, cores = 4)#random effect doesn't help with fit. 
+fit4 <- brm(formula = f4, data = CCsummary3, prior = priors4, family = binomial,chains = 4, cores = 4)#random effect doesn't help with fit. making the priors completely flat doesn't change it either.
 
 #check out model
 model=fit4

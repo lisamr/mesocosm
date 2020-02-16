@@ -355,3 +355,29 @@ bind_treatment_to_states <- function(spatialdataframe, IBM_output){
   return(df2)
 }
 
+
+#for statistics----
+#need to keep track of individuals in order to do a bernoulli regression. going to assume we're keeping 6 species.
+track_individuals <- function(spatialdataframe, IBM_output){
+  
+  #get final state
+  spatialdataframe$state_tf <- IBM_output[,ncol(IBM_output)]
+  
+  #summarize things about the tray: density, density of species, avg host competency
+  trayinfo <- spatialdataframe %>% 
+    as.data.frame() %>% 
+    summarise(density = length(spID),
+              nsp1 = sum(spID=="sp_1"),
+              nsp2 = sum(spID=="sp_2"),
+              nsp3 = sum(spID=="sp_3"),
+              nsp4 = sum(spID=="sp_4"),
+              nsp5 = sum(spID=="sp_5"),
+              nsp6 = sum(spID=="sp_6"),
+              avgCC = sum(comp)/density)
+  
+  #bind trayinfo to individual info
+  output <- cbind(as.data.frame(spatialdataframe), trayinfo) 
+  return(output)
+}
+
+

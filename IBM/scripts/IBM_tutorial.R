@@ -62,8 +62,8 @@ sample_grid <- sample_community(which_spp = 2, perc_inoc = .01, planting_dist = 
 #try out transmission with nearest neighbor only infections and ones with distance decay (kernel) on two communities with different densities
 
 #communities
-samplegrid1 <- sample_community(1, .01, 1) #species 1
-samplegrid2 <- sample_community(6, .01, 1) #species 6
+samplegrid1 <- sample_community(1, .1, 2.55) #species 1
+samplegrid2 <- sample_community(2, .1, 2.55) #species 2
 
 #simulate!
 testrunNN1 <- IBM(samplegrid1, Type = "NN")
@@ -87,6 +87,7 @@ cowplot::plot_grid(p1, p2, p3, p4, labels = c('NN1', 'NN2', 'Kernel1', 'Kernel2'
 
 #now plot spatial map of the spread (animation is ~3 minutes)
 plot_spread_map(samplegrid1, testrunNN1, animate = F)
-plot_spread_map(samplegrid1, testrunKernel1, animate = T)
+plot_spread_map(samplegrid1, testrunKernel1, animate = F)
+plot_spread_map(samplegrid2, testrunKernel2, animate = F)
 #anim_save('IBM/plots/spread_map.gif') #saves last animation
 
