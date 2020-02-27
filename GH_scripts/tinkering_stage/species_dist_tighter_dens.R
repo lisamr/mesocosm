@@ -324,4 +324,28 @@ saveRDS(spdf_list, 'GH_output/species_distributions/spdf_list_tighterdens.RDS')
 #spatial maps to physically print
 #lapply(1:length(spdf_list), plot_maps) #run this to print the maps
 
+#extra----
+spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
+
+spdf_df <- bind_rows(
+  lapply(1:length(spdf_list), function(i)spdf_list[[i]]@data))
+
+#how many individuals? 38277
+nrow(spdf_df)
+
+#how many of each species?
+spdf_df %>% 
+  count(spID)
+#spID      n
+#<fct> <int>
+#1 sp_1  13634
+#2 sp_2   8134
+#3 sp_3   4463
+#4 sp_4   5403
+#5 sp_5   3205
+#6 sp_6   3438
+
+#how many inoculated? 3800 individuals
+spdf_df %>% 
+  count(state0)
 

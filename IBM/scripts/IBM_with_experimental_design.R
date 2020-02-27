@@ -49,11 +49,11 @@ alpha_i_t <- make_alpha_i_t(comp)
 
 #create community----
 #read in list of spatial polygons dataframes for each tray
-#spdf_list <- readRDS('GH_output/species_distributions/spdf_list.RDS')
-spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
+spdf_list <- readRDS('GH_output/species_distributions/spdf_list.RDS')
+#spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
 
 #plot one of them
-plot_maps(spdf_list[[16]]) #can take ~15sec. if error, try again.
+plot_maps(spdf_list[[17]]) #can take ~15sec. if error, try again.
 
 #run epidemic----
 
@@ -64,7 +64,7 @@ IBM_list_NN <- lapply(spdf_list, function(x) IBM(x, "NN") )
 howlongIBM_NN <- proc.time() - ptm# 67 seconds
 
 ptm <- proc.time()# Start the clock!
-IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .0025) )#spatialdecay=.001 in paper, but more likely .0025 in your system.
+IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .001) )#spatialdecay=.001 in paper, but more likely .0025 in your system.
 howlongIBM_Kernel <- proc.time() - ptm# 38 seconds
 
 #save IBM output

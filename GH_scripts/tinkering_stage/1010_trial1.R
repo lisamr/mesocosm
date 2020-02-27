@@ -170,35 +170,46 @@ design1 <- design1 %>%
 
 #iteration2
 #interplanting distances
-Dist2 <- c(2.7, 1.95, 1.55, 1.75) #additive assembly
-Sub2 <- data.frame(dens="sub", Dist=1.4, ncells=340, richness)#sub assembly
+Dist <- c(2.7, 1.95, 1.55, 1.75) #additive assembly
+Sub <- data.frame(dens="sub", Dist=1.75, ncells=224, richness)#sub assembly
 #get number of plants with each interplanting distance
 hex <- sapply(Dist, function(x) length(make_grid_hex(x)))
 dat <- data.frame(Dist, ncells=hex, richness)
 #add in density treatments. additive will increase linearly; substitutive will stay the same.
-design <- rbind(cbind(dens="add", dat), Sub2)
+design <- rbind(cbind(dens="add", dat), Sub)
 design2 <- get_design(sd=.5)
+
+#dens Dist ncells richness
+#1  add 2.70     99        1 **tray7
+#2  add 1.95    180        2 **remove
+#3  add 1.55    279        4 **remove
+#4  add 1.75    224        6 **tray11
+#5  sub 1.75    224        1 **tray8
+#6  sub 1.75    224        2 **remove
+#7  sub 1.75    224        4 **remove
+#8  sub 1.75    224        6 **tray12
+
 #filter only what you want
 design2 <- design2 %>% 
   ungroup() %>% 
-  filter(rand=='det', dens=='sub'|(dens=='add' & richness==1)) %>% 
+  filter(ID %in% c('1.det.add.1', '1.det.add.6', '1.det.sub.1', '1.det.sub.6')) %>% 
   mutate(ID = droplevels.factor(ID),
          trayID = as.numeric(ID)+max(design1$trayID)) 
 
 
 #iteration3
 #interplanting distances
-Dist3 <- c(3, 1.95, 1.55, 1.4) #additive assembly
+Dist <- c(2.7, 1.95, 1.55, 1.4) #additive assembly
 #get number of plants with each interplanting distance
 hex <- sapply(Dist, function(x) length(make_grid_hex(x)))
 dat <- data.frame(Dist, ncells=hex, richness)
 #add in density treatments. additive will increase linearly; substitutive will stay the same.
-design <- rbind(cbind(dens="add", dat), Sub2)
+design <- rbind(cbind(dens="add", dat), Sub)
 design3 <- get_design(sd=.5)
 #filter only what you want
 design3 <- design3 %>% 
   ungroup() %>% 
-  filter(rand=='det', dens=='add' & richness==1) %>%
+  filter(rand=='det', Dist==2.7) %>%
   mutate(ID = droplevels.factor(ID),
          trayID = as.numeric(ID)+max(design2$trayID)) 
 
@@ -247,8 +258,8 @@ plot_maps <- function(i){ #i is which tray
   p1 <- ggplot(data = tmp_df, aes(x=long, y=lat)) +
     geom_polygon(aes(group = group, fill = spID))  +
     geom_path(aes(group = group), color = "white") +
-    geom_point(data=tmp_centroids, aes(X1, X2), 
-               alpha=ifelse(tmp_centroids$state0=="C", 1, 0)) +
+    geom_point(data=tmp_centroids, aes(X1, X2), alpha=ifelse(tmp_centroids$state0=="C", 1, 0)) +
+    geom_point(data=tmp_centroids, aes(X1, X2)) +
     coord_equal() +
     scale_fill_manual(values=Colors) +
     labs(title = paste(paste0('Tray', tmp_df$trayID[1], "-"), tmp_df$rand[1], tmp_df$dens[1], paste0('replicate', tmp_df$rep[1]), sep = '-'),
@@ -260,7 +271,9 @@ plot_maps <- function(i){ #i is which tray
 }
 
 #check out a tray
+
 plot_maps(9)
+
 
 #export----
 

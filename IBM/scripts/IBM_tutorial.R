@@ -91,3 +91,54 @@ plot_spread_map(samplegrid1, testrunKernel1, animate = F)
 plot_spread_map(samplegrid2, testrunKernel2, animate = F)
 #anim_save('IBM/plots/spread_map.gif') #saves last animation
 
+
+#plot maps
+plot_maps <- function(sp_grid){ #i is which tray
+  tmp <- sp_grid #ex/157 "0.5.9.det.add.6"   
+  #make df readable to ggplot
+  # add to data a "ID" column for each feature
+  tmp$id <- rownames(tmp@data)
+  # create a data.frame from our spatial object
+  tmp_df <- fortify(tmp, region = "id") %>% 
+    #merge the "fortified" data with attribute data
+    merge(., tmp@data, by = "id")
+  
+  #add in color id for the species so its the same every time
+  Colors <- pal(spp)
+  names(Colors) <- levels(tmp_df$spID)
+  
+  #make a df of centroids to plot inoculated plants. 
+  tmp_centroids <- data.frame(coordinates(tmp), state0=tmp$state0)
+  
+  #calculate axis labels
+  xs <- unique(sort(round(tmp_centroids$X1, 4)))
+  xs <- xs[seq(1, length(xs), by=2)] #get odds
+  ys <- tmp_centroids$X2 %>% round(4) %>% sort %>% unique 
+  planting_dist <- xs[2]-xs[1]
+  
+  #plot in ggplot!
+  p1 <- ggplot(data = tmp_df, aes(x=long, y=lat)) +
+    geom_polygon(aes(group = group, fill = spID))  +
+    geom_path(aes(group = group), color = "white") +
+    geom_point(data=tmp_centroids, aes(X1, X2), 
+               alpha=ifelse(tmp_centroids$state0=="C", 1, 1)) +
+    coord_equal() +
+    scale_fill_manual(values=Colors) +
+    labs(title = paste(paste0('Tray', tmp_df$trayID[1], "-"), tmp_df$rand[1], tmp_df$dens[1], paste0('replicate', tmp_df$rep[1]), sep = '-'),
+         subtitle = paste("SD =", tmp_df$SD, ', nplants = ', length(tmp), ', spacing = ', planting_dist, 'cm')) +
+    scale_x_continuous(name='', breaks=xs, labels=1:length(xs), sec.axis = dup_axis()) +
+    scale_y_continuous(name='', breaks=ys, labels=rev(LETTERS[1:length(ys)]), sec.axis = dup_axis())
+  
+  return(p1)
+}
+
+#for the cricut machine
+samplegrid <- sample_community(c(2, 3), .1, 2) #species 2
+plot_maps(samplegrid)
+ggsave('GH_plots/cricket_diecut/cricket_2cm.pdf',units = 'in', width = 14.9, height = 12.13) #print with these dimensions to get actual size spacing. 
+samplegrid <- sample_community(c(2, 3), .1, 1.75) #species 2
+plot_maps(samplegrid)
+ggsave('GH_plots/cricket_diecut/cricket_1.75cm.pdf',units = 'in', width = 14.9, height = 12.13) #print with these dimensions to get actual size spacing. 
+samplegrid <- sample_community(c(2, 3), .1, 2.4) #species 2
+plot_maps(samplegrid)
+ggsave('GH_plots/cricket_diecut/cricket_2.4cm.pdf',units = 'in', width = 14.9, height = 12.13) #print with these dimensions to get actual size spacing. 

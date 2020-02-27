@@ -280,14 +280,14 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
   if(animate==T){
     #takes about a minute
     plot <- staticplot + 
-      geom_point(data=tmp_centroids, aes(x, y), size = 3, alpha = ifelse(tmp_centroids$state %in% "I", .5, 0)) +
+      geom_point(data=tmp_centroids, aes(x, y), shape = ifelse(is.na(tmp_centroids$state), 4, 16),size = 3, alpha = ifelse(tmp_centroids$state %in% c("I", NA), .9, 0)) +
       transition_states(time, .5, 1) +
       ggtitle('time step {closest_state} of {tfinal}')
     plot <- animate(plot, nframes=tfinal, fps=5, duration=10)
     
   }else{#plot static plot
     plot <- staticplot + 
-      geom_point(data=tmp_centroids, aes(x, y), size=4, alpha = ifelse(tmp_centroids$state %in% "I", .05, 0)) #reduce alpha so it's easier to see
+      geom_point(data=tmp_centroids, aes(x, y), shape = ifelse(is.na(tmp_centroids$state), 4, 16), size=4, alpha = ifelse(tmp_centroids$state %in% c("I", NA), .05, 0)) #reduce alpha so it's easier to see
   }
   
   return(plot)
