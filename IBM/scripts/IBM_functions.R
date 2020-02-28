@@ -10,6 +10,20 @@ require(gganimate)
 
 #transmission coefficients----
 
+#transmission curves for Rhizoctonia solani
+#mean values approximated from Otten et al. (2003)
+beta_curve <- function(t) .2*exp(-3*(log(t/11))^2)
+alpha_curve <- function(t) .4*(1-.3)^t
+
+#distance decay in probability of secondary transmission from Kleczkowski et al. (1997)
+dist_decay <- function(x, a=14.9, d=.36, tau=3.73, sigma=.00099){
+  C <- a*d*exp(d*tau)
+  y <- C*exp(-sigma*x^2)
+  #standardize to 0-1, relative to a distance of 0
+  y0 <- C*exp(-sigma*0^2)
+  y/y0
+}
+
 #create matrix of amplitudes of the beta_ij 
 make_beta_ij_t <- function(comp){
   beta_ij_amp <- matrix(comp, nrow=length(comp), ncol = length(comp)) #an array of pairwise beta_ij's across time. 

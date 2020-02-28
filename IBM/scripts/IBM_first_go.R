@@ -111,8 +111,10 @@ grid_df <- SpatialPolygonsDataFrame(
     state=sample(c(rep("C", ninoc), rep("S", length(grid)-ninoc)))
   ))
 
+grid_df$state[1] <- NA #introduce NA to test function. might happen when seed doesn't germinate.
+
 #quick plot
-plot(grid_df) + text(coordinates(grid_df), cex=.5, col=as.numeric(grid_df$ID))
+plot(grid_df) + text(coordinates(grid_df), cex=.5, col=as.numeric(grid_df$state))
 
 #define agents dataframe----
 
@@ -150,13 +152,13 @@ get_pairwise_dist <- function(grid_df, sigma){
 
 #for every individual, if state==C, then C->C, C->S, or C->I; if state==S, then S->S, or S->I; if state==I, then always stays I. Each transition has a probability and the fate of the transition determined by a value drawn from a uniform distribution between 0 and 1. Will need to loop through every individual every time step. At each time step, record the state of every individual. Output should be a matrix of states, with rows equalling # individuals and cols equalling # time steps. 
 
-IBM <- function(spatialgrid_df, Type, spatialdecay=.001){
+IBM <- function(grid_df, Type, spatialdecay=.001){
 
   #Type = type of transmission--"NN" or "Kernel". affects which function you run to get agents matrices
   if(Type=="NN"){
-    agents <- get_NN(spatialgrid_df)
+    agents <- get_NN(grid_df)
   }else{ #must be kernel
-    agents <- get_pairwise_dist(spatialgrid_df, sigma=spatialdecay)
+    agents <- get_pairwise_dist(grid_df, sigma=spatialdecay)
   }
   
   #split up the agents list
@@ -197,7 +199,7 @@ IBM <- function(spatialgrid_df, Type, spatialdecay=.001){
     #sum all of the beta_ij's for all of the infected IDs
     
     #are neighbors are infected?
-    is_I <- states_matrix[,t]=="I" 
+    is_I <- states_matrix[,t] %in% "I" 
     #beta's of the infected neighbors
     beta_neighbors <- trans2[i,,t][is_I]
     
@@ -205,11 +207,14 @@ IBM <- function(spatialgrid_df, Type, spatialdecay=.001){
     1 - exp(-1*sum(beta_neighbors)) #number infected
   }
   
+  #which agents are not NA? NA usually because plant didn't germinate.
+  germinated <- which(!is.na(agentsdf$state))
+  
   for(t in 1:(tfinal-1)){ #at every time step
     #get alpha_i(t) (inoculum to plant transmission coef)
     alpha_i <- C_to_Ia(t)
     
-    for(i in 1:nrow(agentsdf)){ #for every individual
+    for(i in germinated){ #for every GERMINATED individual
       P <- runif(1, 0, 1)#draw random number
       
       if(states_matrix[i,t]=="C"){
@@ -257,7 +262,7 @@ head(testrunKernel)
 
 #first plot summary of S and I
 plotS_I <- function(IBM_output){
-  sum_states <- function(data) cbind(sum(data %in% c("S", "C")), sum(data =="I"))
+  sum_states <- function(data) cbind(sum(data %in% c("S", "C")), sum(data %in%"I"))
   df1 <- data.frame(time=1:ncol(IBM_output), t(apply(IBM_output, 2, sum_states)))
   names(df1) <- c('time', 'S', 'I')
   df1 <- pivot_longer(df1, cols=c('S', 'I'), names_to = 'state', values_to = 'count')
