@@ -96,33 +96,10 @@ beta_ij_t <- make_beta_ij_t(comp)#matrix of amplitudes of the beta_ij
 alpha_i_t <- make_alpha_i_t(comp)#transmission from C -> I 
 
 #simulate
-testrunKernel1 <- IBM(samplegrid1, Type = "Kernel", spatialdecay = .002)
+testrunKernel1 <- IBM(spdf_list[[5]], Type = "Kernel", spatialdecay = .0011)
 
-
-#make sense of data (part 2)----
-
-#this is not the fastest way to do this, but using the same functions as from the IBM simulation. 
-bind_data <- function(i){
-  whichtray <- rows %>% filter(trayID == i)
-  state_mat_ind <- state_mat[c(whichtray$firstrow:whichtray$lastrow),]
-  bind_treatment_to_states(spdf_list[[whichtray$trayID]], state_mat_ind)
-}
-trt_states_df <- bind_rows(lapply(whichones, bind_data))
-
-#plot changes in I (#inf and %inf) over time
-filter(trt_states_df, SD==.5) %>% 
-  ggplot(., aes(time, I, group=trayID)) +
-  geom_line(alpha=.5, color='dodgerblue4') +
-  facet_grid(cols = vars(richness),
-             rows = vars(rand, dens))
-
-#plot I (#inf and %inf) at final time step
-trt_states_df %>% filter(time==tfinal, SD==.5) %>% 
-  ggplot(., aes(richness, I, group = rep)) +
-  geom_line(alpha=.5, color='dodgerblue4') +
-  facet_grid(cols = vars(dens),
-             rows = vars(rand))
-
-
-
+#plot
+plotS_I(state_mat_list[[5]])
+plotS_I(testrunKernel1)
+plot_spread_map(spdf_list[[5]], testrunKernel1, animate = F)
 

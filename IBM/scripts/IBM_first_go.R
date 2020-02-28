@@ -331,6 +331,6 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
   return(plot)
 }
 
-plot_spread_map(grid_df, testrunKernel, animate = T)
+plot_spread_map(grid_df, testrunKernel, animate = F)
 #anim_save('GH_plots/spread_map.gif') #saves last animation
 
