@@ -89,6 +89,7 @@ for(i in 1:length(state_mat_list)){
   comp[i] <- Itfinal/S0 #proportion infected from secondary transmission
 }
 comp #use this to feed your model. 
+#comp <- comp/comp['radish'] #comp standardized to radish
 
 #parameters for model
 delta <- 1/5 #1/average number of days inoc stays around
@@ -110,7 +111,7 @@ for(i in 1:length(state_mat_list)){
 apply(simulation_matrix, 1, mean) - comp #good for mustard and radish, underestimating disease for other species.
 
 #simulate single plot 
-x <- 2 #which trayID
+x <- 5 #which trayID
 testrunKernel1 <- IBM(spdf_list[[x]], Type = "Kernel", spatialdecay = .001)
 
 #plot

@@ -126,10 +126,13 @@ get_design <- function(sd){
 design_orig <- get_design(sd=.5)
 
 #figure of design with 4 treatments
-#ggplot(filter(design_orig, rep==2), aes(richness, nind, group=fct_rev(species), fill=species))+ geom_col()+ facet_wrap(~rand+dens)+ scale_fill_manual(values=pal)
+ggplot(filter(design_orig, rep==2), aes(richness, nind, group=fct_rev(species), fill=species))+ geom_col()+ facet_wrap(~rand+dens)+ scale_fill_manual(values=pal)
 
 #check out change in numbers
-#design_orig %>% group_by(ID) %>% pivot_wider(names_from = species, values_from = nind) %>% dplyr::select(-order, -comp, -SD, -rep, -dens)
+design_orig %>% group_by(ID) %>% pivot_wider(names_from = species, values_from = nind) %>% dplyr::select(-order, -comp, -SD, -rep, -dens)
+
+design_orig %>% group_by(ID) %>% 
+  summarise(sum(nind))
 
 #decouple richness and Community competency----
 
