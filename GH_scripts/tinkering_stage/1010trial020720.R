@@ -95,11 +95,27 @@ delta <- 1/5 #1/average number of days inoc stays around
 beta_ij_t <- make_beta_ij_t(comp)#matrix of amplitudes of the beta_ij 
 alpha_i_t <- make_alpha_i_t(comp)#transmission from C -> I 
 
-#simulate
-testrunKernel1 <- IBM(spdf_list[[5]], Type = "Kernel", spatialdecay = .0011)
+#simulate and return percent infected
+sim_pI <- function(grid_df, spatialdecay=.001){
+  simulation <- IBM(grid_df, Type = "Kernel", spatialdecay)
+  sum(simulation[,ncol(simulation)] %in% "I")/sum(simulation[,ncol(simulation)] %in% c("I", "S"))
+}
+
+nreps <- 20
+simulation_matrix <- matrix(NA, nrow = length(state_mat_list), ncol=nreps)
+for(i in 1:length(state_mat_list)){
+  simulation_matrix[i,] <- replicate(nreps, sim_pI(spdf_list[[i]])) 
+}
+#calculate deviation from 'observed'
+apply(simulation_matrix, 1, mean) - comp #good for mustard and radish, underestimating disease for other species.
+
+#simulate single plot 
+x <- 2 #which trayID
+testrunKernel1 <- IBM(spdf_list[[x]], Type = "Kernel", spatialdecay = .001)
 
 #plot
-plotS_I(state_mat_list[[5]])
-plotS_I(testrunKernel1)
-plot_spread_map(spdf_list[[5]], testrunKernel1, animate = F)
+plotS_I(state_mat_list[[x]]) #real
+plotS_I(testrunKernel1) #simulated
+plot_spread_map(spdf_list[[x]], state_mat_list[[x]], animate = F) #real
+plot_spread_map(spdf_list[[x]], testrunKernel1, animate = F)#simulated
 

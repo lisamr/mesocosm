@@ -49,8 +49,8 @@ alpha_i_t <- make_alpha_i_t(comp)
 
 #create community----
 #read in list of spatial polygons dataframes for each tray
-spdf_list <- readRDS('GH_output/species_distributions/spdf_list.RDS')
-#spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
+#spdf_list <- readRDS('GH_output/species_distributions/spdf_list.RDS')
+spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
 
 #plot one of them
 plot_maps(spdf_list[[17]]) #can take ~15sec. if error, try again.
@@ -61,11 +61,11 @@ plot_maps(spdf_list[[17]]) #can take ~15sec. if error, try again.
 
 ptm <- proc.time()# Start the clock!
 IBM_list_NN <- lapply(spdf_list, function(x) IBM(x, "NN") )
-howlongIBM_NN <- proc.time() - ptm# 67 seconds
+howlongIBM_NN <- proc.time() - ptm# 73 seconds
 
 ptm <- proc.time()# Start the clock!
-IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .001) )#spatialdecay=.001 in paper, but more likely .0025 in your system.
-howlongIBM_Kernel <- proc.time() - ptm# 38 seconds
+IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .0015) )#spatialdecay=.001 in paper, but more likely .0025 in your system.
+howlongIBM_Kernel <- proc.time() - ptm# 57 seconds
 
 #save IBM output
 saveRDS(IBM_list_NN, 'IBM/outputs/IBM_list_NN.RDS')
@@ -228,15 +228,18 @@ ptm <- proc.time()# Start the clock!
 fit1 <- brm(formula = f1, data = ind_trials, prior = priors1, chains = 3, cores = 4)
 fit1 <- add_criterion(fit1, 'loo')
 howlongfit1 <-proc.time() - ptm # 827sec
-#saveRDS(fit1, 'IBM/outputs/fit1_bernoulli.RDS')
+saveRDS(fit1, 'IBM/outputs/fit1_bernoulli.RDS')
 ptm <- proc.time()# Start the clock!
 fit2 <- brm(formula = f2, data = ind_trials, prior = priors1, chains = 3, cores = 4)
 fit2 <- add_criterion(fit2, 'loo')
 howlongfit2 <-proc.time() - ptm # 
-#saveRDS(fit2, 'IBM/outputs/fit2_bernoulli.RDS')
+saveRDS(fit2, 'IBM/outputs/fit2_bernoulli.RDS')
+
+fit1 <- readRDS('IBM/outputs/fit1_bernoulli.RDS')
+fit2 <- readRDS('IBM/outputs/fit2_bernoulli.RDS')
 
 #contrast models
-print(loo_compare(fit1, fit2), simplify=F) #nominally better.
+print(loo_compare(fit1, fit2), simplify=F) #they're the same.
 
 #assess fit
 model=fit1
@@ -265,6 +268,7 @@ model %>%
   ggplot(., aes(i, .value)) +
   geom_point(size=.2)
 #probably want to regress against your predictors, but can play with that later.
+
 
 #predictions
 newd_CC <- expand.grid(avgCC.s=seq(-1,1,length.out = 50), density.s=seq(-1,1,length.out = 5), richness.s=0, trayID=1)

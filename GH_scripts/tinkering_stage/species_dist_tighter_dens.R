@@ -14,9 +14,11 @@ length <- width
 
 #initial design pars
 richness <- c(1,2,4,6)
-Dist <- c(2.55, 1.95, 1.55, 1.4) #interplanting distances
-#Dist <- c(2.85, 2.25, 1.75, 1.55) #interplanting distances
-Sub <- data.frame(dens="sub", Dist=1.75, ncells=224, richness)#values informed by hexagon grid below.
+#interplanting distances
+Dist <- c(2.8, 2.1, 1.7, 1.5) #in between. Go with this.
+#Dist <- c(2.55, 1.95, 1.55, 1.4) #tighter
+#Dist <- c(2.85, 2.25, 1.75, 1.55) #original
+Sub <- data.frame(dens="sub", Dist=1.7, ncells=238, richness)#values informed by hexagon grid below.
 nreps <- 10
 comp <- c(1, .3, .2, .1, .001, 0) #vector of relative "competencies". have to differentiate sp5 and 6 somehow.
 pinoc <- .1 #percent inoculated at start of experiemnt
@@ -122,6 +124,12 @@ get_design <- function(sd){
 }
 
 design_orig <- get_design(sd=.5)
+
+#figure of design with 4 treatments
+#ggplot(filter(design_orig, rep==2), aes(richness, nind, group=fct_rev(species), fill=species))+ geom_col()+ facet_wrap(~rand+dens)+ scale_fill_manual(values=pal)
+
+#check out change in numbers
+#design_orig %>% group_by(ID) %>% pivot_wider(names_from = species, values_from = nind) %>% dplyr::select(-order, -comp, -SD, -rep, -dens)
 
 #decouple richness and Community competency----
 
@@ -330,7 +338,7 @@ spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS'
 spdf_df <- bind_rows(
   lapply(1:length(spdf_list), function(i)spdf_list[[i]]@data))
 
-#how many individuals? 38277
+#how many individuals? 36748
 nrow(spdf_df)
 
 #how many of each species?
@@ -338,14 +346,14 @@ spdf_df %>%
   count(spID)
 #spID      n
 #<fct> <int>
-#1 sp_1  13634
-#2 sp_2   8134
-#3 sp_3   4463
-#4 sp_4   5403
-#5 sp_5   3205
-#6 sp_6   3438
+#1 sp_1  13485
+#2 sp_2   6714
+#3 sp_3   4041
+#4 sp_4   5824
+#5 sp_5   3924
+#6 sp_6   2760
 
-#how many inoculated? 3800 individuals
+#how many inoculated? 3667 individuals
 spdf_df %>% 
   count(state0)
 

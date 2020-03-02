@@ -56,7 +56,7 @@ plot_grid <- function(grid, axes=T, ...){
 
 
 #plot distance against # cells
-Dist <- seq(1,3,by=.05) %>% round(2) #seq makes imprecise numbers, %in% needs perfect equality. 
+Dist <- seq(1,3,by=.01) %>% round(2) #seq makes imprecise numbers, %in% needs perfect equality. 
 sq <- sapply(Dist, function(x) length(make_grid_sq(x)))
 hex <- sapply(Dist, function(x) length(make_grid_hex(x)))
 dat <- data.frame(Dist, sq, hex)
@@ -67,7 +67,7 @@ p1 <- ggplot(dat2, aes(Dist, ncells, color=grid)) +
   geom_line() +
   scale_y_continuous(limits=c(0,750)) 
 #p1+scale_y_log10()
-#plotly::ggplotly(p1)
+plotly::ggplotly(p1)
 
 #envision how the densities may change with the richness levels in your experiment
 richness <- c(1,2,4,6)
