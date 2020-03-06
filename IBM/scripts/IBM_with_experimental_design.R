@@ -53,7 +53,7 @@ alpha_i_t <- make_alpha_i_t(comp)
 spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
 
 #plot one of them
-plot_maps(spdf_list[[17]]) #can take ~15sec. if error, try again.
+plot_maps(spdf_list[[41]]) #can take ~15sec. if error, try again.
 
 #run epidemic----
 
@@ -65,7 +65,7 @@ howlongIBM_NN <- proc.time() - ptm# 73 seconds
 
 ptm <- proc.time()# Start the clock!
 IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .0015) )#spatialdecay=.001 in paper, but more likely .0025 in your system.
-howlongIBM_Kernel <- proc.time() - ptm# 57 seconds
+howlongIBM_Kernel <- proc.time() - ptm# 76 seconds
 
 #save IBM output
 saveRDS(IBM_list_NN, 'IBM/outputs/IBM_list_NN.RDS')
@@ -86,11 +86,12 @@ plotS_I(IBM_list_NN[[1]])
 plotS_I(IBM_list_Kernel[[1]])
 
 #now plot spatial map of the spread (animation about a minute)
-#154-157 is add/det; 158-161 is sub/det
-plot_spread_map(spdf_list[[154]], IBM_list_Kernel[[154]], animate = F)
-plot_spread_map(spdf_list[[155]], IBM_list_Kernel[[155]], animate = F)
-plot_spread_map(spdf_list[[156]], IBM_list_Kernel[[156]], animate = F)
-plot_spread_map(spdf_list[[157]], IBM_list_Kernel[[157]], animate = F)
+#plot 21, 64, 107, 150 showing det/sub series
+#plot 1, 41, 84, 127 showing det/add series
+plot_spread_map(spdf_list[[21]], IBM_list_Kernel[[21]], animate = F)
+plot_spread_map(spdf_list[[64]], IBM_list_Kernel[[64]], animate = F)
+plot_spread_map(spdf_list[[107]], IBM_list_Kernel[[107]], animate = F)
+plot_spread_map(spdf_list[[150]], IBM_list_Kernel[[150]], animate = F)
 
 #anim_save('IBM/plots/spread_map_detsub6.gif') #saves last animation
 

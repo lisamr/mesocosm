@@ -1,13 +1,13 @@
 #create grids for experiment with 1010 trays and hexagonal layout.
 #collapse all chunks: option command O
 
-#load packages----
+#LOAD PACKAGES----
 rm(list=ls())
 library(raster)
 library(tidyverse)
 library(ggplot2)
 
-#define parameters----
+#DEFINE PARAMETERS----
 #tray dimensions
 width <- 9.5*2.54
 length <- width 
@@ -21,6 +21,7 @@ Dist <- c(2.8, 2.1, 1.7, 1.5) #in between. Go with this.
 Sub <- data.frame(dens="sub", Dist=1.7, ncells=238, richness)#values informed by hexagon grid below.
 nreps <- 10
 comp <- c(1, .3, .2, .1, .001, 0) #vector of relative "competencies". have to differentiate sp5 and 6 somehow.
+nspp <- length(comp)
 pinoc <- .1 #percent inoculated at start of experiemnt
 
 #for plotting
@@ -28,7 +29,7 @@ pal <- RColorBrewer::brewer.pal(n = max(richness), name = "RdYlBu")
 
 theme_set(theme_bw())
 
-#create design skeleton----
+#CREATE DESIGN SKELETON----
 
 #First create hexagonal grid to figure out constraints.
 #planting area for 1010 tray is 9.5in^2. 
@@ -36,7 +37,7 @@ tray <- raster(ncol=1, nrow=1, crs="+proj=utm +zone=1 +datum=WGS84", xmn=0, xmx=
 values(tray) <- 1
 tray <- rasterToPolygons(tray) #convert to sp poly
 
-#create hexagon grid
+#create hexagon grid (can also use the already defined function `make_grid`)
 make_grid_hex <- function(r){
   hex_points <- spsample(tray, type = "hexagonal", cellsize = r, offset=c(0.1,0.1)) #setting square offset value ensures the same grid is drawn every time. 
   hex_grid <- HexPoints2SpatialPolygons(hex_points, dx = r)
@@ -51,7 +52,58 @@ dat <- data.frame(Dist, ncells=hex, richness)
 design <- rbind(cbind(dens="add", dat), Sub)
 
 
-#simulate species distribution----
+
+#STOCHASTIC SPECIES ORDER----
+#instead of randomly creating different species orders for stochastic treatments, should do a random stratified order. that way, with only 20 (10 of each densities) replicates, the broadest range of orders are represented. 
+
+#matrix of species orders
+order_mat <- matrix(NA, nrow = nreps*2, ncol = length(comp))
+
+#figure out first species for each replicate
+y <- floor(2*nreps/nspp) #minimum number of times each species is the first species 
+x <- rep(1:nspp, y)
+extrax <- sample(1:nspp, nrow(order_mat)-length(x), F) #some species get to start an extra time. this is because nreps may not be a multiple of nspp. 
+order_mat[,1] <- c(x, extrax)
+
+#fill in the rest of the columns
+for(i in 1:nrow(order_mat)){
+  firstsp <- order_mat[i,1]
+  nextsp <- sample(c(1:nspp)[-firstsp])
+  order_mat[i,2:ncol(order_mat)] <- nextsp
+}
+
+#reshuffle the rows where first 2 species are the same.
+reshuffle_rows <- 1 #initiate the vector to keep track of while loop. make sure its a number so it can be a T/F, i.e. no NA
+while(sum(reshuffle_rows)!=0){ #repeats loop until condition met
+  
+  #all the pairwise combinations to compare
+  pairs <- combn(nrow(order_mat), 2) 
+  
+  #do lots of pairwise comparisons of first 2 species
+  reshuffle <- rep(NA, ncol(pairs))
+  for(i in 1:ncol(pairs)){
+    A <- pairs[1,i]
+    B <- pairs[2,i]
+    reshuffle[i] <- order_mat[A,1]==order_mat[B,1] & order_mat[A,2]==order_mat[B,2] #compare them
+  }
+  
+  #reshuffle the bottom row. then check again.
+  reshuffle_rows <- pairs[2,reshuffle] 
+  for(i in reshuffle_rows){
+    firstsp <- order_mat[i,1]
+    nextsp <- sample(c(1:nspp)[-firstsp])
+    order_mat[i,2:ncol(order_mat)] <- nextsp
+  }
+}
+
+order_mat #species order for stochastic treatments :)
+
+#orders to be added to design dataframe
+stochastic_order <- as.vector(apply(t(order_mat), 2, rep, 4))
+deterministic_order <- rep(1:6, length.out = length(stochastic_order))
+competencies <- comp[c(deterministic_order, stochastic_order)]
+
+#SIMULATE SPECIES DISTRIBUTION----
 
 #assume relative abundances come from a log-normal distribution. Will randomly draw from a lognormal 10000 times and take the mean relative proportions.
 nspp <- max(richness) #number of species
@@ -105,19 +157,32 @@ get_design <- function(sd){
   #assigning competency values that vary deterministically or randomly (stochastic) with order.
   sp <- paste0("sp_", 1:nspp)
   names(sp) <- comp
+  
+  
   #create design with treatments, competencies, & species
-  design4 <- suppressWarnings(
-    design3 %>% 
-      group_by(rep, rand, dens) %>% 
-      mutate(
-        comp = case_when( 
-          rand=="det" ~ comp[order],
-          rand=="stoch" ~ sample(comp, replace = F)[order]),
-        species = as.factor(recode(comp, !!!sp)) ) %>% 
-      mutate(comp = round(comp, 1), 
-             SD = sd, 
-             ID = interaction(rep, rand, dens, richness))
-  ) 
+  design4 <- design3 %>% 
+    arrange(rand, dens, rep, richness) %>% 
+    mutate(comp = competencies, 
+           species = as.factor(recode(comp, !!!sp))) %>%
+    mutate(comp = round(comp, 1), 
+           SD = sd, 
+           ID = interaction(rep, rand, dens, richness))
+
+  
+  
+  
+  #create design with treatments, competencies, & species
+#  design4 <- suppressWarnings(
+#    design3 %>% 
+ #     group_by(rep, rand, dens) %>% 
+  #    mutate(
+   #     comp = case_when( 
+    #      rand=="det" ~ comp[order],
+     #     rand=="stoch" ~ sample(comp, replace = F)[order]),
+      #  species = as.factor(recode(comp, !!!sp)) ) %>% 
+    #  mutate(comp = round(comp, 1), 
+     #        SD = sd, 
+      #       ID = interaction(rep, rand, dens, richness))) 
   
   #get design!
   return(design4)
@@ -126,15 +191,21 @@ get_design <- function(sd){
 design_orig <- get_design(sd=.5)
 
 #figure of design with 4 treatments
-ggplot(filter(design_orig, rep==2), aes(richness, nind, group=fct_rev(species), fill=species))+ geom_col()+ facet_wrap(~rand+dens)+ scale_fill_manual(values=pal)
+ggplot(filter(design_orig, rep==4), aes(richness, nind, group=fct_rev(species), fill=species))+ geom_col()+ facet_wrap(~rand+dens)+ scale_fill_manual(values=pal)
 
 #check out change in numbers
 design_orig %>% group_by(ID) %>% pivot_wider(names_from = species, values_from = nind) %>% dplyr::select(-order, -comp, -SD, -rep, -dens)
 
-design_orig %>% group_by(ID) %>% 
-  summarise(sum(nind))
+design_orig %>% group_by(rep, rand, dens, richness) %>% 
+  summarise(total = sum(nind), 
+            sp_1 = nind[species=='sp_1'], 
+            sp_2 = nind[species=='sp_2'],
+            sp_3 = nind[species=='sp_3'],
+            sp_4 = nind[species=='sp_4'],
+            sp_5 = nind[species=='sp_5'],
+            sp_6 = nind[species=='sp_6']) 
 
-#decouple richness and Community competency----
+#DECOUPLE RICHNESS AND COMPETENCY----
 
 #redo what you did above, but with a different sd. then filter out just what you need.
 filter_design <- function(sd){
@@ -167,7 +238,7 @@ sd1 <- filter_design(1)
 design_augmented <- bind_rows(design_orig, sd5, sd2, sd1)
 design_augmented$trayID <- as.numeric(interaction(design_augmented$SD, design_augmented$ID, drop = T))
 
-#create maps----
+#CREATE MAPS----
 #create spatial maps to allow you to sow and monitor your trays.
 
 #splits df by trays
@@ -216,8 +287,9 @@ dflist_to_sp <- function(i){
 #create spatial polygons dataframe for each tray. takes a few minutes
 spdf_list <- lapply(1:length(dflist), dflist_to_sp)
 
+names(dflist) #ID of the maps
 
-#plot figures----
+#PLOT FIGURES----
 
 #plot density vs richness for both treatments.
 ggplot(design, aes(richness, ncells, color=dens)) + 
@@ -304,25 +376,25 @@ plot_maps <- function(i){ #i is which tray
 #check out a tray
 plot_maps(17)
 
-#plot 14 to 17 showing det/sub series
+#plot 21, 64, 107, 150 showing det/sub series
 blank_theme <- theme(title = element_blank(), legend.position="none", axis.text = element_blank(), axis.ticks = element_blank())
-tray14 <- plot_maps(14)+ blank_theme
-tray15 <- plot_maps(15)+ blank_theme
-tray16 <- plot_maps(16)+ blank_theme
-tray17 <- plot_maps(17)+ blank_theme
-cowplot::plot_grid(tray14, tray15, tray16, tray17)
+tray1 <- plot_maps(21)+ blank_theme
+tray2 <- plot_maps(64)+ blank_theme
+tray3 <- plot_maps(107)+ blank_theme
+tray4 <- plot_maps(150)+ blank_theme
+cowplot::plot_grid(tray1, tray2, tray3, tray4)
 ggsave('GH_plots/species_distributions/four_maps_detsub.pdf', width = 7, height = 7)
 
-#plot 26 to 29 showing det/add series
-tray26 <- plot_maps(26)+ blank_theme
-tray27 <- plot_maps(27)+ blank_theme
-tray28 <- plot_maps(28)+ blank_theme
-tray29 <- plot_maps(29)+ blank_theme
-cowplot::plot_grid(tray26, tray27, tray28, tray29)
+#plot 1, 41, 84, 127 showing det/add series
+tray1 <- plot_maps(1)+ blank_theme
+tray2 <- plot_maps(41)+ blank_theme
+tray3 <- plot_maps(84)+ blank_theme
+tray4 <- plot_maps(127)+ blank_theme
+cowplot::plot_grid(tray1, tray2, tray3, tray4)
 ggsave('GH_plots/species_distributions/four_maps_detadd.pdf', width = 7, height = 7)
 
 
-#export----
+#EXPORT----
 
 #design dataframe 
 write.csv(design_augmented, 'GH_output/species_distributions/design_augmented.csv', row.names = F)
@@ -335,7 +407,7 @@ saveRDS(spdf_list, 'GH_output/species_distributions/spdf_list_tighterdens.RDS')
 #spatial maps to physically print
 #lapply(1:length(spdf_list), plot_maps) #run this to print the maps
 
-#extra----
+#EXTRA----
 spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
 
 spdf_df <- bind_rows(
@@ -349,12 +421,12 @@ spdf_df %>%
   count(spID)
 #spID      n
 #<fct> <int>
-#1 sp_1  13485
-#2 sp_2   6714
-#3 sp_3   4041
-#4 sp_4   5824
-#5 sp_5   3924
-#6 sp_6   2760
+#1 sp_1  12991
+#2 sp_2   6951
+#3 sp_3   4708
+#4 sp_4   4840
+#5 sp_5   3773
+#6 sp_6   3485
 
 #how many inoculated? 3667 individuals
 spdf_df %>% 
