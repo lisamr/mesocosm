@@ -8,6 +8,7 @@ library(tidyverse)
 library(ggplot2)
 
 #DEFINE PARAMETERS----
+set.seed(0) #same results every time you redo your simulation
 #tray dimensions
 width <- 9.5*2.54
 length <- width 
@@ -22,10 +23,13 @@ Sub <- data.frame(dens="sub", Dist=1.7, ncells=238, richness)#values informed by
 nreps <- 10
 comp <- c(1, .3, .2, .1, .001, 0) #vector of relative "competencies". have to differentiate sp5 and 6 somehow.
 nspp <- length(comp)
+#spp <- c('radish', 'arugula', 'pac_choy', 'romaine', 'basil', 'clover')
+spp <- paste0('sp_', 1:nspp)
 pinoc <- .1 #percent inoculated at start of experiemnt
 
 #for plotting
 pal <- RColorBrewer::brewer.pal(n = max(richness), name = "RdYlBu")
+names(pal) <- spp
 
 theme_set(theme_bw())
 
@@ -155,7 +159,8 @@ get_design <- function(sd){
     design2)
   
   #assigning competency values that vary deterministically or randomly (stochastic) with order.
-  sp <- paste0("sp_", 1:nspp)
+  #sp <- paste0("sp_", 1:nspp)
+  sp <- spp
   names(sp) <- comp
   
   
@@ -167,6 +172,8 @@ get_design <- function(sd){
     mutate(comp = round(comp, 1), 
            SD = sd, 
            ID = interaction(rep, rand, dens, richness))
+  
+  design4$species <- fct_relevel(design4$species, spp)
 
   
   
@@ -198,12 +205,12 @@ design_orig %>% group_by(ID) %>% pivot_wider(names_from = species, values_from =
 
 design_orig %>% group_by(rep, rand, dens, richness) %>% 
   summarise(total = sum(nind), 
-            sp_1 = nind[species=='sp_1'], 
-            sp_2 = nind[species=='sp_2'],
-            sp_3 = nind[species=='sp_3'],
-            sp_4 = nind[species=='sp_4'],
-            sp_5 = nind[species=='sp_5'],
-            sp_6 = nind[species=='sp_6']) 
+            sp_1 = nind[species==spp[1]], 
+            sp_2 = nind[species==spp[2]],
+            sp_3 = nind[species==spp[3]],
+            sp_4 = nind[species==spp[4]],
+            sp_5 = nind[species==spp[5]],
+            sp_6 = nind[species==spp[6]]) 
 
 #DECOUPLE RICHNESS AND COMPETENCY----
 
@@ -296,7 +303,7 @@ ggplot(design, aes(richness, ncells, color=dens)) +
   geom_point() + 
   geom_line() + 
   scale_y_continuous(limits=c(0,400)) 
-#ggsave('GH_plots/species_distributions/density_richness.pdf')
+ggsave('GH_plots/species_distributions/density_richness.pdf')
 
 #change rand and dens names for plotting
 rand.labs <- c('deterministic', 'stochastic')
@@ -305,7 +312,7 @@ dens.labs <- c("additive", "substitutive")
 names(dens.labs) <- c("add", "sub")
 
 #figure of design with 4 treatments
-ggplot(filter(design_orig, rep==2), aes(richness, nind, group=fct_rev(species), fill=species))+
+ggplot(filter(design_orig, rep==4), aes(richness, nind, group=fct_rev(species), fill=species))+
   geom_col()+
   facet_wrap(~rand+dens, labeller = labeller(rand=rand.labs, dens=dens.labs))+
   scale_fill_manual(values=pal)
@@ -346,7 +353,8 @@ plot_maps <- function(i){ #i is which tray
   
   #add in color id for the species so its the same every time
   Colors <- pal
-  names(Colors) <- levels(tmp_df$spID)
+  #names(Colors) <- levels(tmp_df$spID)
+  names(Colors) <- spp
   
   #make a df of centroids to plot inoculated plants. 
   tmp_centroids <- data.frame(coordinates(tmp), state0=tmp$state0)
@@ -404,10 +412,9 @@ write.csv(design_augmented, 'GH_output/species_distributions/design_augmented.cs
 saveRDS(spdf_list, 'GH_output/species_distributions/spdf_list_tighterdens.RDS')
 #open with `readRDS('filename')`
 
-#spatial maps to physically print
-#lapply(1:length(spdf_list), plot_maps) #run this to print the maps
-
 #EXTRA----
+source('IBM/scripts/IBM_functions.R')
+
 spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
 
 spdf_df <- bind_rows(
@@ -421,14 +428,57 @@ spdf_df %>%
   count(spID)
 #spID      n
 #<fct> <int>
-#1 sp_1  12991
-#2 sp_2   6951
-#3 sp_3   4708
-#4 sp_4   4840
-#5 sp_5   3773
-#6 sp_6   3485
+#1 sp_1  12878
+#2 sp_2   7711
+#3 sp_3   4613
+#4 sp_4   4326
+#5 sp_5   3462
+#6 sp_6   3758
 
 #how many inoculated? 3667 individuals
 spdf_df %>% 
   count(state0)
+
+#EXPORT MAPS----
+#spatial maps to physically print
+
+#split maps by density. need to export them at slightly different sizes to make sure printing actual size lines up with designated interplanting distances. Will give thems to mom to make paper templates for sowing. also will print up smaller maps to keep track of infections in binder. 
+
+grps <- sapply(spdf_list, nrow)#crate groups based on number of features
+split_list <- split(spdf_list, grps)#split list by the groups
+
+#distances=2.8, 2.1, 1.7, 1.5
+spdf_2.8 <- split_list$`85`
+spdf_2.1 <- split_list$`154`
+spdf_1.7 <- split_list$`238`
+spdf_1.5 <- split_list$`304`
+
+plot_maps(spdf_2.1[[1]], point_shape = 8, point_cex = 15)
+
+#make the maps
+maps_2.8 <- lapply(1:length(spdf_2.8), function(x) plot_maps(spdf_2.8[[x]], point_shape = 8, point_cex = 25))
+maps_2.1 <- lapply(1:length(spdf_2.1), function(x) plot_maps(spdf_2.1[[x]], point_shape = 8, point_cex = 20))
+maps_1.7 <- lapply(1:length(spdf_1.7), function(x) plot_maps(spdf_1.7[[x]], point_shape = 8, point_cex = 15))
+maps_1.5 <- lapply(1:length(spdf_1.5), function(x) plot_maps(spdf_1.5[[x]], point_shape = 8, point_cex = 12.5))
+
+#print those maps at specific sizes. can't use ggsave with multipaged plots.
+cm_in <- function(x) x*0.393701
+
+pdf('GH_plots/maps/maps_actualsize_2.8cm.pdf', width = cm_in(32.135), height = cm_in(32.135))
+maps_2.8
+dev.off()
+
+pdf('GH_plots/maps/maps_actualsize_2.1cm.pdf', width = cm_in(32.108), height = cm_in(32.108))
+maps_2.1
+dev.off()
+
+pdf('GH_plots/maps/maps_actualsize_1.7cm.pdf', width = cm_in(31.565), height = cm_in(31.565))
+maps_1.7
+dev.off()
+
+pdf('GH_plots/maps/maps_actualsize_1.5cm.pdf', width = cm_in(31.678), height = cm_in(31.678))
+maps_1.5
+dev.off()
+
+
 

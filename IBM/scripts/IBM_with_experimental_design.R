@@ -17,7 +17,7 @@ pinoc <- .1 #percent inoculated at start of experiemnt
 s <- 6 #max number of species
 spp <- c(paste0('sp_', rep(1:s))) #names of species
 tfinal <- 25 #how many time steps
-comp <- c(1, .5, .3, .2, 0, 0) #vector of relative "competencies"
+comp <- c(.6, .3, .2, .1, 0, 0) #vector of relative "competencies"
 
 #DISEASE 
 #transmission curves
@@ -61,11 +61,11 @@ plot_maps(spdf_list[[41]]) #can take ~15sec. if error, try again.
 
 ptm <- proc.time()# Start the clock!
 IBM_list_NN <- lapply(spdf_list, function(x) IBM(x, "NN") )
-howlongIBM_NN <- proc.time() - ptm# 73 seconds
+howlongIBM_NN <- proc.time() - ptm# 90 seconds
 
 ptm <- proc.time()# Start the clock!
-IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .0015) )#spatialdecay=.001 in paper, but more likely .0025 in your system.
-howlongIBM_Kernel <- proc.time() - ptm# 76 seconds
+IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .001) )#spatialdecay=.001 in paper, but more likely .0025 in your system.
+howlongIBM_Kernel <- proc.time() - ptm# 66 seconds
 
 #save IBM output
 saveRDS(IBM_list_NN, 'IBM/outputs/IBM_list_NN.RDS')
@@ -203,7 +203,7 @@ Scale <- function(x){
 library(brms)
 library(tidybayes)
 
-#going to do a bernoulli trial, so need data on individuals. fuck, it's >38000 individuals. OMG. ugh.
+#going to do a bernoulli trial, so need data on individuals. fuck, it's >37000 individuals. OMG. ugh.
 ind_trials <- suppressWarnings(bind_rows(lapply(1:length(spdf_list), function(i) track_individuals(spdf_list[[i]], IBM_list_Kernel[[i]])))) 
 ind_trials$infected <- ifelse(ind_trials$state_tf=="I", 1, 0)
 ind_trials$trayID <- as.factor(ind_trials$trayID)
@@ -268,7 +268,29 @@ model %>%
   filter(.draw<50) %>% 
   ggplot(., aes(i, .value)) +
   geom_point(size=.2)
-#probably want to regress against your predictors, but can play with that later.
+
+#regress against your predictors. looks fine, no major patterns. 
+trayinfo <- ind_trials %>% 
+  filter(ID=="ID1") %>% 
+  select(trayID, rand, dens, richness, rep, SD, density, nsp1, nsp2, nsp3, nsp4, nsp5, nsp6, avgCC) %>% 
+  mutate(trayID=as.integer(trayID))
+trayinfo_RE <- model %>% 
+  gather_draws(r_trayID[i,]) %>% 
+  filter(.draw<50) %>% 
+  left_join(., trayinfo, by=c("i"="trayID"))
+head(trayinfo_RE)
+#plot against nsp1, richness, density, avgCC, and intrxns.
+ggplot(trayinfo_RE, aes(avgCC, .value)) +
+  geom_point(alpha=.2) +
+  facet_wrap(~density)
+ggplot(trayinfo_RE, aes(avgCC, .value)) +
+  geom_point(alpha=.2) +
+  facet_wrap(~richness)
+ggplot(trayinfo_RE, aes(avgCC, .value)) +
+  geom_point(alpha=.2) 
+ggplot(trayinfo_RE, aes(nsp1, .value)) +
+  geom_point(alpha=.2) 
+
 
 
 #predictions

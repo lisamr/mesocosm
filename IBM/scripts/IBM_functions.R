@@ -311,7 +311,7 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
 
 #plotting functions after simulation----
 #for plotting spdf_list objects
-plot_maps <- function(spatialdataframe, plotted_points=c("C"), point_cex = 1){ #i is which tray
+plot_maps <- function(spatialdataframe, plotted_points=c("C"), point_cex = 1, point_shape = 16){ #i is which tray
   tmp <- spatialdataframe 
   
   #make df readable to ggplot
@@ -341,6 +341,7 @@ plot_maps <- function(spatialdataframe, plotted_points=c("C"), point_cex = 1){ #
     geom_path(aes(group = group), color = "white") +
     geom_point(data=tmp_centroids, aes(X1, X2), 
                cex = point_cex,
+               shape = point_shape,
                alpha=ifelse(tmp_centroids$state0 %in% plotted_points, 1, 0)) +
     coord_equal() +
     scale_fill_manual(values=Colors) +

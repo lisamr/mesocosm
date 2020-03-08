@@ -17,7 +17,7 @@ pinoc <- .1 #percent inoculated at start of experiemnt
 s <- 6 #max number of species
 spp <- c(paste0('sp_', rep(1:s))) #names of species
 tfinal <- 20 #how many time steps
-comp <- c(1, .5, .3, .2, 0, 0) #vector of relative "competencies"
+comp <- c(.6, .3, .2, .1, 0, 0) #vector of relative "competencies"
 
 #DISEASE 
 #transmission curves
@@ -51,7 +51,7 @@ alpha_i_t <- make_alpha_i_t(comp)
 #create community----
 
 #I created a sample community in the IBM source code. It's a simple 2 species community. However, you'll likely want to make your own. 
-sample_grid <- sample_community(which_spp = 2, perc_inoc = .01, planting_dist = 1)
+sample_grid <- sample_community(which_spp = 2, perc_inoc = .01, planting_dist = 1.7)
 
 
 
@@ -62,14 +62,14 @@ sample_grid <- sample_community(which_spp = 2, perc_inoc = .01, planting_dist = 
 #try out transmission with nearest neighbor only infections and ones with distance decay (kernel) on two communities with different densities
 
 #communities
-samplegrid1 <- sample_community(1, .1, 2.55) #species 1
-samplegrid2 <- sample_community(2, .1, 2.55) #species 2
+samplegrid1 <- sample_community(1, .1, 1.7) #species 1
+samplegrid2 <- sample_community(2, .1, 1.7) #species 2
 
 #simulate!
 testrunNN1 <- IBM(samplegrid1, Type = "NN")
 testrunNN2 <- IBM(samplegrid2, Type = "NN")
-testrunKernel1 <- IBM(samplegrid1, Type = "Kernel", spatialdecay = .002)
-testrunKernel2 <- IBM(samplegrid2, Type = "Kernel", spatialdecay = .002)
+testrunKernel1 <- IBM(samplegrid1, Type = "Kernel", spatialdecay = .001)
+testrunKernel2 <- IBM(samplegrid2, Type = "Kernel", spatialdecay = .001)
 
 #view
 head(testrunNN1); head(testrunKernel1)

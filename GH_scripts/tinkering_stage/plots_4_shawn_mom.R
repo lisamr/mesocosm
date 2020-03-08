@@ -18,6 +18,12 @@
 #7 1.det.sub.4     238    86    61    50    41     0     0
 #8 1.det.sub.6     238    68    50    40    33    27    20
 
+#horizontal vertical
+#[1,]        2.8 2.424871
+#[2,]        2.1 1.818653
+#[3,]        1.7 1.472243
+#[4,]        1.5 1.299038
+
 #load source code----
 rm(list=ls())
 source('IBM/scripts/IBM_functions.R')
