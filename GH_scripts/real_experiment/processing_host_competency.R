@@ -27,80 +27,115 @@ test_track_individuals <- function(spatialdataframe, IBM_output){
   return(output)
 }
 
-#DESIGN PARAMETERS----
-#distances wanted
-Dist <- c(1.7)
 
-#spp used
-spp <- c('radish', 'mustard', 'arugula', 'pac_choy', 'romaine', 'basil', 'clover', 'alfalfa')
-comp <- c(.6, .4, .3, .2, .1, 0, 0, 0) #vector of relative "competencies"
-names(comp) <- spp
+#IMPORT DESIGN AND SPATIAL DATAFRAME----
 
-#create trays
-#tray dimensions
-width <- 9.5*2.54
-length <- width 
-tray <- make_tray(width, length) #contraining the hexes to 9.5 inches.
+design <- read.csv('GH_output/real_experiment/host_competency_design_03092020.csv', row.names = 'X')
+spdf_list <- readRDS('GH_output/real_experiment/host_competency_03092020.RDS')
 
-#MAKE TRAYS----
-#interplanting distance is just 1.7cm
+#GENERATE DATAFRAME----
 
-#design
-#6 species, 5 trays each, 1 interplanting distance
-design <- expand.grid(species = spp, rep = 1:5, distance = Dist) %>% arrange(species)
-design$trayID <- row.names(design)
+#ID numbers start in bottom left corner and move up L to R
+#trays missing last row. fill in with NAs.
 
-#write.csv(design, 'GH_output/real_experiment/host_competency_design_03092020.csv')
 
-get_grid <- function(x){
-  design_x <- design[x,]
-  which_spp <- which(spp == design_x$species)
-  grid <- sample_community(which_spp, .1, Dist)
-  grid$comp <- comp[design_x$species]
-  grid$trayID <- design_x$trayID
-  grid$rep <- design_x$rep
-  return(grid)
+add_axes <- function(spatial_object){
+  #convert spatial object into dataframe
+  spdf <- spatial_object@data
+  
+  #create axis columns that appear on maps
+  #get x and y coordinates
+  xs <- unique(sort(round(spdf$x, 4)))
+  ys <- spdf$y %>% round(4) %>% sort %>% unique
+  
+  #translate coordinates into letters or integers
+  horiz.ax <- rep(1:ceiling(length(xs)/2), each=2)
+  #have to correct for rows that have odd numbers.
+  horiz.ax <- if(length(xs)/2 != ceiling(length(xs)/2)){
+    horiz.ax[-length(horiz.ax)]
+  }else{
+    horiz.ax
+  }
+  horiz.ax <- horiz.ax + rep(c(0,.5), length.out=length(horiz.ax))
+  vert.ax <- LETTERS[rev(1:length(ys))]
+  names(horiz.ax) <- xs
+  names(vert.ax) <- ys
+  
+  #add axis columns
+  spdf <- spdf %>% 
+    mutate(x = round(x, 4),
+           y = round(y, 4),
+           horiz = recode(x, !!!horiz.ax),
+           vert = recode(y, !!!vert.ax))
+  
+  return(spdf)
 }
 
-grid_list <- list(NULL)
-for(i in 1:nrow(design)){
-  grid_list[[i]] <- get_grid(i)
+#choose the trays you used. Didn't plant trays 10, 24, 25, 29, 30, 34, 35, 37, 38, 39, 40
+design
+
+whichones <- c(1:40)[-c(10, 24, 25, 29, 30, 34, 35, 37, 38, 39, 40)]
+
+#turn grid_list into dataframe to record data
+traydf <- suppressWarnings(bind_rows(lapply(whichones, function(i) add_axes(spdf_list[[i]])))) 
+
+traydf <- traydf %>% mutate(day_infected = NA) %>% select(trayID, horiz, vert, everything(), -comp)
+
+write.csv(traydf, 'GH_output/real_experiment/host_competency_03092020_datasheet.csv', row.names = F)
+
+#get state matrix----
+
+#after doing your experiment, enter data and save.
+data <- read_csv('GH_data/real_experiment/host_competency_03092020_datasheet.csv')
+print(data, width=Inf)
+
+#determine final state of each individual. 
+data <- data %>%
+  mutate(state_final = case_when(
+    is.na(state0) ~ NA_character_, #can't use NA. must designate which NA to use. (NA_real_, NA_character_, NA_integer_, NA_complex_)
+    is.na(day_infected) ~ "S",
+    day_infected>0 ~ "I"
+  )) 
+
+#put into the form of the IBM simulation. 
+#generate a matrix of state changes. That can be plotted. Also bind state matrix to the original attribute data. 
+tfinal <- max(data$day_infected, na.rm = T) #number of days of monitoring
+spp <- unique(data$spID) #names of species
+
+#fill in the state matrix
+state_mat <- matrix("S", ncol=tfinal, nrow=nrow(data))
+for(i in 2:(tfinal)){
+  state_mat[,i] <- state_mat[,i-1]#current time same as last time
+  I <- which(data$state_final=='I' & data$day_infected==i)#find infecteds
+  state_mat[I,i] <- "I"#update state if infected
+}
+#replace first column with challenged status and rows as NA
+state_mat[,1] <- data$state0
+state_mat[is.na(data$state_final),] <- NA
+
+#split state matrix by tray
+rows <- data %>%
+  mutate(row=row_number()) %>%  
+  group_by(trayID) %>% 
+  summarise(firstrow=first(row), lastrow=last(row))
+
+state_mat_list <- list(NULL)
+for(i in rows$trayID){
+  whichtray <- rows %>% filter(trayID == i)
+  state_mat_list[[i]] <- state_mat[c(whichtray$firstrow:whichtray$lastrow),]
 }
 
-#saveRDS(grid_list, 'GH_output/real_experiment/host_competency_03092020.RDS')
+#update the spatial dataframes with any changes in NAs and states (if inoculations moved, species identity changed, or no germination)
+for(i in 1:length(state_mat_list)){
+  spdf_list[[i]]$state0 <- state_mat_list[[i]][,1]
+}
 
-grid_list <- readRDS('GH_output/real_experiment/host_competency_03092020.RDS')
-
-plot_maps(grid_list[[1]])
-
-#PRINT MAPS----
-print_maps <- lapply(1:length(grid_list), function(x) plot_maps(grid_list[[x]], point_cex = 2) )
-
-#pdf('GH_plots/maps/host_competency_03092020.pdf')
-print_maps
-#dev.off()
+#plot a tray
+plotS_I(state_mat_list[[1]])
+plot_spread_map(spdf_list[[1]], state_mat_list[[1]], animate = F)
 
 
-#SIMULATION----
-
-#model parameters
-tfinal <- 25 #how many time steps
-beta_curve <- function(x) .2*exp(-3*(log(x/11))^2)
-alpha_curve <- function(x) .4*(1-.3)^x
-delta <- 1/5 #1/average number of days inoc stays around
-beta_ij_t <- make_beta_ij_t(comp) #matrix of amplitudes of the beta_ij 
-alpha_i_t <- make_alpha_i_t(comp) #rate of infection from inoculum to plant
-
-#simulate
-set.seed(0)
-IBM_list <- lapply(1:length(grid_list), function(x) IBM(grid_list[[x]], 'Kernel', .001))
-
-#plot
-plotS_I(IBM_list[[2]])
-plot_spread_map(grid_list[[6]], IBM_list[[6]], animate = F)
-
-
-#analysis----
+#ANALYSIS----
 library(brms)
 library(tidybayes)
 dens <- function(x, ...) plot(density(x), ...)
@@ -111,7 +146,7 @@ Scale <- function(x){
 }
 
 #do a logistic regression to predict the probability of a secondary infection. do on invididuals. bernoulli trial. 
-ind_trials_list <- lapply(1:length(grid_list), function(x) test_track_individuals(grid_list[[x]], IBM_list[[x]]))
+ind_trials_list <- lapply(1:length(state_mat_list), function(x) test_track_individuals(spdf_list[[x]], state_mat_list[[x]]))
 ind_trials <- bind_rows(ind_trials_list)
 ind_trials$infected <- ifelse(ind_trials$state_tf=="I", 1, 0)
 
@@ -281,6 +316,6 @@ fitted_fit2 %>%
   ggplot(., aes(y = spID, x = .value)) +
   geom_halfeyeh(.width = .9, size=.1, fatten_point = .1, relative_scale = 4, point_interval = median_hdi) +
   facet_grid(rows = vars(state0))
-ggsave('IBM/plots/host_competency_estimates_fit2.pdf')
+#ggsave('IBM/plots/host_competency_estimates_fit2.pdf')
 
 
