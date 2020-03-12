@@ -32,8 +32,8 @@ test_track_individuals <- function(spatialdataframe, IBM_output){
 Dist <- c(1.7)
 
 #spp used
-spp <- c('radish', 'arugula', 'pac_choy', 'romaine', 'basil', 'clover')
-comp <- c(.6, .3, .2, .1, 0, 0) #vector of relative "competencies"
+spp <- c('radish', 'mustard', 'arugula', 'pac_choy', 'romaine', 'basil', 'clover', 'alfalfa')
+comp <- c(.6, .4, .3, .2, .1, 0, 0, 0) #vector of relative "competencies"
 names(comp) <- spp
 
 #create trays
@@ -65,7 +65,63 @@ for(i in 1:nrow(design)){
   grid_list[[i]] <- get_grid(i)
 }
 
-plot_maps(grid_list[[6]])
+#saveRDS(grid_list, 'GH_output/real_experiment/host_competency_03092020.RDS')
+
+grid_list <- readRDS('GH_output/real_experiment/host_competency_03092020.RDS')
+
+plot_maps(grid_list[[1]])
+
+#PRINT MAPS----
+print_maps <- lapply(1:length(grid_list), function(x) plot_maps(grid_list[[x]], point_cex = 2) )
+
+#pdf('GH_plots/maps/host_competency_03092020.pdf')
+print_maps
+#dev.off()
+
+#GENERATE DATAFRAME----
+
+#ID numbers start in bottom left corner and move up L to R
+#trays missing last row. fill in with NAs.
+
+
+add_axes <- function(spatial_object){
+  #convert spatial object into dataframe
+  spdf <- spatial_object@data
+  
+  #create axis columns that appear on maps
+  #get x and y coordinates
+  xs <- unique(sort(round(spdf$x, 4)))
+  ys <- spdf$y %>% round(4) %>% sort %>% unique
+  
+  #translate coordinates into letters or integers
+  horiz.ax <- rep(1:(length(xs)/2), each=2)
+  horiz.ax <- horiz.ax + rep(c(0,.5), length.out=length(horiz.ax))
+  vert.ax <- LETTERS[rev(1:length(ys))]
+  names(horiz.ax) <- xs
+  names(vert.ax) <- ys
+  
+  #add axis columns
+  spdf <- spdf %>% 
+    mutate(x = round(x, 4),
+           y = round(y, 4),
+           horiz = recode(x, !!!horiz.ax),
+           vert = recode(y, !!!vert.ax))
+  
+  return(spdf)
+}
+
+#choose the trays you used. Didn't plant trays 10, 24, 25, 29, 30, 34, 35, 37, 38, 39, 40
+design
+
+whichones <- c(1:40)[-c(10, 24, 25, 29, 30, 34, 35, 37, 38, 39, 40)]
+
+#turn grid_list into dataframe to record data
+traydf <- suppressWarnings(bind_rows(lapply(whichones, function(i) add_axes(grid_list[[i]])))) 
+
+traydf <- traydf %>% mutate(day = NA) %>% select(trayID, horiz, vert, everything())
+
+write.csv(traydf, 'GH_output/real_experiment/hostcompetency03092020_datasheet.csv', row.names = F)
+
 
 #SIMULATION----
 

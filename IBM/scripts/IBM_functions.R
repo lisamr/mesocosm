@@ -324,7 +324,8 @@ plot_maps <- function(spatialdataframe, plotted_points=c("C"), point_cex = 1, po
   
   #add in color id for the species so its the same every time
   Colors <- pal(spp)
-  names(Colors) <- levels(tmp_df$spID)
+  #names(Colors) <- levels(tmp_df$spID)
+  names(Colors) <- spp
   
   #make a df of centroids to plot inoculated plants. 
   tmp_centroids <- data.frame(coordinates(tmp), state0=tmp$state0)

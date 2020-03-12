@@ -23,8 +23,8 @@ Sub <- data.frame(dens="sub", Dist=1.7, ncells=238, richness)#values informed by
 nreps <- 10
 comp <- c(1, .3, .2, .1, .001, 0) #vector of relative "competencies". have to differentiate sp5 and 6 somehow.
 nspp <- length(comp)
-#spp <- c('radish', 'arugula', 'pac_choy', 'romaine', 'basil', 'clover')
-spp <- paste0('sp_', 1:nspp)
+spp <- c('radish', 'arugula', 'pac_choy', 'romaine', 'basil', 'clover')
+#spp <- paste0('sp_', 1:nspp) #use for the maps for mom.
 pinoc <- .1 #percent inoculated at start of experiemnt
 
 #for plotting
@@ -405,26 +405,34 @@ ggsave('GH_plots/species_distributions/four_maps_detadd.pdf', width = 7, height 
 #EXPORT----
 
 #design dataframe 
-write.csv(design_augmented, 'GH_output/species_distributions/design_augmented.csv', row.names = F)
-
+#write.csv(design_augmented, 'GH_output/species_distributions/design_augmented.csv', row.names = F)
 
 #list of spatial dataframes
-saveRDS(spdf_list, 'GH_output/species_distributions/spdf_list_tighterdens.RDS')
+#saveRDS(spdf_list, 'GH_output/species_distributions/spdf_list_tighterdens.RDS')
+
+#also saving it as the final spatial dataframe. easier to have duplicates than changing file names across scripts. 
+write.csv(design_augmented, 'GH_output/real_experiment/big_experiment_design_03302020.csv', row.names = F)
+saveRDS(spdf_list, 'GH_output/real_experiment/big_experiment_spdf_list_03302020.RDS') 
+
 #open with `readRDS('filename')`
 
 #EXTRA----
 source('IBM/scripts/IBM_functions.R')
 
-spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
+spdf_list_sp <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
+spdf_list_named <- readRDS('GH_output/real_experiment/big_experiment_spdf_list_03302020.RDS')
 
-spdf_df <- bind_rows(
-  lapply(1:length(spdf_list), function(i)spdf_list[[i]]@data))
+spdf_df_sp <- bind_rows(
+  lapply(1:length(spdf_list_sp), function(i)spdf_list_sp[[i]]@data))
+spdf_df_named <- bind_rows(
+  lapply(1:length(spdf_list_named), function(i)spdf_list_named[[i]]@data))
+
 
 #how many individuals? 36748
-nrow(spdf_df)
+nrow(spdf_df_named)
 
 #how many of each species?
-spdf_df %>% 
+spdf_df_named %>% 
   count(spID)
 #spID      n
 #<fct> <int>
@@ -436,16 +444,24 @@ spdf_df %>%
 #6 sp_6   3758
 
 #how many inoculated? 3667 individuals
-spdf_df %>% 
+spdf_df_named %>% 
   count(state0)
 
 #EXPORT MAPS----
-#spatial maps to physically print
+#spatial maps to physically print. Don't actually run these unless you're exporting maps. Will take a very long time. 
 
+#MAPS FOR BINDER
+#first print the ones that go in the binder. Want to use the maps with the real names. 
+maps_all <- lapply(1:length(spdf_list_named), function(x) plot_maps(spdf_list_named[[x]], point_shape = 16, point_cex = 2.5))
+#pdf('GH_plots/maps/maps_all_for_binder.pdf')
+maps_all
+#dev.off()
+
+#MAPS FOR SOWING TRAYS
 #split maps by density. need to export them at slightly different sizes to make sure printing actual size lines up with designated interplanting distances. Will give thems to mom to make paper templates for sowing. also will print up smaller maps to keep track of infections in binder. 
 
-grps <- sapply(spdf_list, nrow)#crate groups based on number of features
-split_list <- split(spdf_list, grps)#split list by the groups
+grps <- sapply(spdf_list_sp, nrow)#crate groups based on number of features
+split_list <- split(spdf_list_sp, grps)#split list by the groups
 
 #distances=2.8, 2.1, 1.7, 1.5
 spdf_2.8 <- split_list$`85`
