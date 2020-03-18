@@ -5,6 +5,7 @@
 
 rm(list=ls())
 source('IBM/scripts/IBM_functions.R')
+library(lubridate)
 
 #functions to be added to source code...
 test_track_individuals <- function(spatialdataframe, IBM_output){
@@ -32,6 +33,25 @@ test_track_individuals <- function(spatialdataframe, IBM_output){
 design <- read.csv('GH_output/real_experiment/big_experiment_design_03302020.csv')
 spdf_list <- readRDS('GH_output/real_experiment/big_experiment_spdf_list_03302020.RDS')
 
+#decide which day you'll plant each tray
+set.seed(033020)
+planting_days <- data.frame(tray = 1:length(spdf_list), 
+           day_planted =sample(rep(1:3, length.out=length(spdf_list))))
+
+#add in the dates
+dates <- c(as.Date("2020-03-30"), as.Date("2020-03-30")+1, as.Date("2020-03-30")+2)
+planting_days$date_planted <- dates[planting_days$day_planted]
+
+#add in the days to check off
+days <- paste0('day', seq(0, 21, by=3))
+planting_days[,days] <- NA
+planting_days <- planting_days %>% 
+  arrange(day_planted) %>% 
+  mutate(notes = NA)
+
+head(planting_days)
+
+write_csv(planting_days, 'GH_output/real_experiment/daily_checklist.csv', na = "")
 
 #GENERATE DATAFRAME----
 

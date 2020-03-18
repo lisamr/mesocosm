@@ -102,7 +102,7 @@ sim_pI <- function(grid_df, spatialdecay=.001){
   sum(simulation[,ncol(simulation)] %in% "I")/sum(simulation[,ncol(simulation)] %in% c("I", "S"))
 }
 
-nreps <- 20
+nreps <- 100
 simulation_matrix <- matrix(NA, nrow = length(state_mat_list), ncol=nreps)
 for(i in 1:length(state_mat_list)){
   simulation_matrix[i,] <- replicate(nreps, sim_pI(spdf_list[[i]])) 
@@ -110,13 +110,28 @@ for(i in 1:length(state_mat_list)){
 #calculate deviation from 'observed'
 apply(simulation_matrix, 1, mean) - comp #good for mustard and radish, underestimating disease for other species.
 
+
+pdf('GH_plots/tinkering_stage/histogram_simvsobs_020720.pdf')
+lapply(1:5, function(sp) 
+  {hist(simulation_matrix[sp,], xlim=c(0,1), main='100 simulations vs. observed', sub = spp[sp], xlab='prop. infected')
+  abline(v=comp[sp], col='red', lwd=2)
+} )
+dev.off()
+
 #simulate single plot 
 x <- 5 #which trayID
 testrunKernel1 <- IBM(spdf_list[[x]], Type = "Kernel", spatialdecay = .001)
 
+pdf('GH_plots/tinkering_stage/real_vs_simulated_radish.pdf')
 #plot
 plotS_I(state_mat_list[[x]]) #real
 plotS_I(testrunKernel1) #simulated
 plot_spread_map(spdf_list[[x]], state_mat_list[[x]], animate = F) #real
 plot_spread_map(spdf_list[[x]], testrunKernel1, animate = F)#simulated
+dev.off()
 
+plot_spread_map(spdf_list[[x]], state_mat_list[[x]], animate = T) #real
+anim_save('GH_plots/tinkering_stage/real_radish_animation.gif') #saves last animation
+
+plot_spread_map(spdf_list[[x]], testrunKernel1, animate = T)#simulated
+anim_save('GH_plots/tinkering_stage/simulated_radish_animation.gif') #saves last animation
