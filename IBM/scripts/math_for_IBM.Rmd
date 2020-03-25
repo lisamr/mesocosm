@@ -3,8 +3,8 @@ title: "math for IBM"
 author: "Lisa Rosenthal"
 date: "1/29/2020"
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -40,7 +40,7 @@ To calculate $\beta(t, r)$, let $\beta(t, r) = c(r)p(t)$, where $c$ is contact r
 
 I must discretize the continuous time equations above and have it recalculated at each time step.  
 
-The probability of the following state transitions are...
+*(**WARNING**: notation probably wrong!)* The probability of the following state transitions are...
 
 C -> S: $1-e^{-\delta}$  
 

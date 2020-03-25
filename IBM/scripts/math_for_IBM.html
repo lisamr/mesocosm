@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html>
 
 <head>
 
 <meta charset="utf-8" />
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="pandoc" />
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
@@ -331,6 +330,7 @@ summary {
   border: none;
   display: inline-block;
   border-radius: 4px;
+  background-color: transparent;
 }
 
 .tabset-dropdown > .nav-tabs.nav-tabs-open > li {
@@ -389,7 +389,7 @@ summary {
 <p>I have two models: one that assumes infections can only occur between nearest neighbors and one that assumes that contact rates decay with distance. For both, transmission varies with time. Currently, the <span class="math inline">\(\alpha(t)\)</span> and <span class="math inline">\(\beta(t)\)</span> curves originate from Otten et al. (2003), which were estimated from <em>Rhizoctonia solani</em> infections on radish. I am assuming that species with different competencies only changes the amplitude of those distributions.</p>
 <p>To calculate <span class="math inline">\(\beta(t, r)\)</span>, let <span class="math inline">\(\beta(t, r) = c(r)p(t)\)</span>, where <span class="math inline">\(c\)</span> is contact rate as a function of <span class="math inline">\(r\)</span> distance and <span class="math inline">\(p\)</span> is probability of transmission given contact. For the nearest neighbor model, we assume <span class="math inline">\(r=1\)</span> for neighbors directly adjacent and <span class="math inline">\(r=0\)</span> for all others. For the model with distance decay, <span class="math inline">\(r\)</span> is the pairwise distance between individuals.</p>
 <p>I must discretize the continuous time equations above and have it recalculated at each time step.</p>
-<p>The probability of the following state transitions are…</p>
+<p><em>(<strong>WARNING</strong>: notation probably wrong!)</em> The probability of the following state transitions are…</p>
 <p>C -&gt; S: <span class="math inline">\(1-e^{-\delta}\)</span></p>
 <p>C -&gt; I: <span class="math inline">\(2-e^{-\alpha_i(t)} - e^{-\sum_r\sum_jc(r)p_{ij}(t)I_j}\)</span></p>
 <p>C -&gt; C: <span class="math inline">\(1-(1-e^{-\delta})-(2-e^{-\alpha_i(t)} - e^{-\sum_r\sum_jc(r)p_{ij}(t)I_j})\)</span></p>
