@@ -46,8 +46,8 @@ An individual $x_i$ either staying or transitioning between states is determined
 
 $$
 \begin{aligned}
-P(C \rightarrow I)_{x_i} &= 1 - exp(-\alpha_i(t) + \sum_j\beta_{x_iI_j}(t, r)I_j)\\
-P(C \rightarrow C)_{x_i} &= exp(-\alpha_i(t) + \sum_j\beta_{x_iI_j}(t, r)I_j)\\
+P(C \rightarrow I)_{x_i} &= 1 - exp(-(\alpha_i(t) + \sum_j\beta_{x_iI_j}(t, r)I_j))\\
+P(C \rightarrow C)_{x_i} &= exp(-(\alpha_i(t) + \sum_j\beta_{x_iI_j}(t, r)I_j))\\
 P(S \rightarrow I)_{x_i} &= 1 - exp(- \sum_j\beta_{x_iI_j}(t, r)I_j)\\
 P(S \rightarrow S)_{x_i} &= exp(- \sum_j\beta_{x_iI_j}(t, r)I_j)\\
 P(I \rightarrow I)_{x_i} &= 1\\
