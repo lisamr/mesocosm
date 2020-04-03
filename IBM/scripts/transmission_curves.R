@@ -3,7 +3,13 @@
 #transmission curves
 #mean values approximated from Otten et al. (2003)
 alpha_curve <- function(x) .4*(1-.3)^x
-beta_curve <- function(x) .2*exp(-3*(log(x/11))^2)
+#alpha_curve <- function(x) exp(-.5*x)
+beta_curve <- function(x, amp=.2, gamma=3, tq=11) {
+  #amp=amplitude
+  #gamma=variance of curve
+  #tq=time of peak
+  amp*exp(-gamma*(log(x/tq))^2)
+  }
 
 
 #distance decay in probability of secondary transmission from Kleczkowski et al. (1997). increase sigma to decay a bit faster.
@@ -20,8 +26,8 @@ dist_decay <- function(x, a=14.9, d=.36, tau=3.73, sigma=.00099){
   #y/y20
 }
 
-distance2 <- seq(1,20, by=1) #mm
-plot(distance2, dist_decay(distance2, sigma = 100), type='l')
+distance2 <- seq(1,50, by=1) #mm
+plot(distance2, dist_decay(distance2, sigma = .002), type='l')
 which(dist_decay(distance2)<.1)#past 53mm essentially zero
 
 #plot it
@@ -30,7 +36,7 @@ distance <- seq(0,50, by=1) #mm
 plot(time, alpha_curve(time), type='l')
 
 par(mfrow=c(1,2))
-plot(time, beta_curve(time), type='l') 
+plot(time, beta_curve(time, gamma = 2, tq=15), type='l') 
 plot(distance, dist_decay(distance), type='l')
 par(mfrow=c(1,1))
 

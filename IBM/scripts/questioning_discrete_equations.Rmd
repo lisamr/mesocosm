@@ -1,0 +1,36 @@
+---
+title: "Questioning discrete equations"
+author: "Lisa Rosenthal"
+date: "4/1/2020"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+I have 3 states of plants: **C**hallenged with inoculum, **S**usceptibles, and **I**nfecteds. Since it's a density dependent disease, C, S, and I are the number of individuals within those states. Let's assume $$\frac{dC}{dt} = -\delta C -\alpha C - \beta CI$$ where $\delta$ is the rate that the inoculum decays, $\alpha$ is the inoculum-plant tranmission rate, and $\beta$ is the plant-plant transmission rate.  
+
+With your help, I disretized these equations and came up with the following transition probabilities:  
+
+$$
+\begin{aligned}
+P_{C\rightarrow S} &= 1 - e^{-\delta} \\
+P_{C\rightarrow I} &= 1 - (e^{-\alpha} + e^{-\beta I}) \\
+P_{C\rightarrow C} &= 1 - P_{C\rightarrow S} - P_{C\rightarrow I} \\
+\end{aligned}
+$$
+
+If we assume that $\delta=\alpha=\beta=1$ and that there are 10 infecteds at the time, then CC ends up negative. I'm not sure if the equation for CI, CC, or all are to blame. 
+```{r}
+delta=alpha=beta=1
+I_count=10
+CS <- 1 - exp(-delta)
+CI <- 1 - (exp(-alpha) + exp(-beta*I_count))
+CC <- 1 - CI - CS
+CC+CI+CS #sums to 1
+CC #negative probability :(
+```
+
