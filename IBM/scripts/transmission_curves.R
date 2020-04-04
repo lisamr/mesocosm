@@ -3,7 +3,7 @@
 #transmission curves
 #mean values approximated from Otten et al. (2003)
 alpha_curve <- function(x) .4*(1-.3)^x
-#alpha_curve <- function(x) exp(-.5*x)
+alpha_curve <- function(x) .4*exp(-.7*x)
 beta_curve <- function(x, amp=.2, gamma=3, tq=11) {
   #amp=amplitude
   #gamma=variance of curve
@@ -32,10 +32,12 @@ which(dist_decay(distance2)<.1)#past 53mm essentially zero
 
 #plot it
 time <- seq(0,25, by=1) #days
-distance <- seq(0,50, by=1) #mm
+alpha_curve <- function(x) .4*(1-.3)^x
+alpha_curve <- function(x) .4*exp(-.3*x)
 plot(time, alpha_curve(time), type='l')
 
 par(mfrow=c(1,2))
+distance <- seq(0,50, by=1) #mm
 plot(time, beta_curve(time, gamma = 2, tq=15), type='l') 
 plot(distance, dist_decay(distance), type='l')
 par(mfrow=c(1,1))

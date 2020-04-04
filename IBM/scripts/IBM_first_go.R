@@ -17,7 +17,7 @@ length <- width
 
 #DESIGN (keep the names the same. simplifies downstream functions)
 pinoc <- .1 #percent inoculated at start of experiemnt
-r <- 2 #interplanting distance
+r <- 1.5 #interplanting distance
 s <- 6 #number of species
 spp <- c(paste0('sp_', rep(1:s))) #names of species
 tfinal <- 20 #how many time steps
@@ -43,12 +43,7 @@ dist_decay <- function(x, a=14.9, d=.36, tau=3.73, sigma=.00099){
   #y/y20
 }
 
-
-### transmission from C -> S ###
-#inoculum decay rate invariant of species.
-delta <- 1/5 #1/average number of days inoc stays around
-
-### transmission from S -> I ###
+### secondary transmission###
 #create a matrix of the beta_ij values. Assume that pairwise values will control the amplitude of beta(t). these will come from empirical data, but will just make them up for now.
 
 #create matrix of amplitudes of the beta_ij 
@@ -67,7 +62,7 @@ make_beta_ij_t <- function(comp){
 
 beta_ij_t <- make_beta_ij_t(comp)
 
-### transmission from C -> I ###
+###primary transmission###
 #rate of infection from inoculum to plant. varies by species and time. 
 make_alpha_i_t <- function(comp){
   a <- alpha_curve(1:tfinal)
@@ -107,7 +102,7 @@ grid_df <- SpatialPolygonsDataFrame(
     ID=row.names(grid),
     x=coordinates(grid)[,1],
     y=coordinates(grid)[,2],
-    spID=sample(c('sp_1', 'sp_6'), length(grid), T, prob = c(1.5,1)),
+    spID=sample(c('sp_1', 'sp_2'), length(grid), T, prob = c(1.5,1)),
     state=sample(c(rep("C", ninoc), rep("S", length(grid)-ninoc)))
   ))
 
@@ -153,7 +148,7 @@ get_pairwise_dist <- function(grid_df, sigma){
 #for every individual, if state==C, then C->C, C->S, or C->I; if state==S, then S->S, or S->I; if state==I, then always stays I. Each transition has a probability and the fate of the transition determined by a value drawn from a uniform distribution between 0 and 1. Will need to loop through every individual every time step. At each time step, record the state of every individual. Output should be a matrix of states, with rows equalling # individuals and cols equalling # time steps. 
 
 IBM <- function(grid_df, Type, spatialdecay=.001){
-
+  
   #Type = type of transmission--"NN" or "Kernel". affects which function you run to get agents matrices
   if(Type=="NN"){
     agents <- get_NN(grid_df)
@@ -170,41 +165,36 @@ IBM <- function(grid_df, Type, spatialdecay=.001){
   #initiate first time step
   states_matrix[,1] <- as.character(agentsdf$state)
   
-  #inoculum decay
-  C_to_S <- 1 - exp(-delta) 
   
   #define function for prob of inoculum to plant transmission
-  C_to_Ia <- function(t){
+  alpha_t <- function(t){
     #alpha_i at time t
-    rate <- alpha_i_t[as.character(agentsdf$spID),t]
-    #rate of transmission C -> I via inoculum
-    unname(1 - exp(-(rate))) 
+    alpha_i_t[as.character(agentsdf$spID),t]
   }
   
   #an array of pairwise transmission matrix
   #fill in the community grid with the beta_ij_t values
-  #get pairwise betas for all of the individuals given their species identity.
-  trans <- beta_ij_t[as.character(agentsdf$spID), as.character(agentsdf$spID),] 
+  #get pairwise probabilities of infection for all of the individuals given their species identity.
+  pij_t <- beta_ij_t[as.character(agentsdf$spID), as.character(agentsdf$spID),] 
   #account for distance decay or nearest neigbor
-  trans2 <- trans*rep(agents_neigbors, times=dim(trans)[3])
-
+  beta_t <- pij_t*rep(agents_neigbors, times=dim(pij_t)[3])
+  
   #change the species names to their IDs
-  colnames(trans2) <- rownames(trans2) <- agentsdf$ID
+  colnames(beta_t) <- rownames(beta_t) <- agentsdf$ID
   
   #define function for prob of plant to plant transmission
-  C_or_S_to_Ib <- function(t, i){
-
-    #infections happen at the rate: 
-    #e^(-sum_j(beta_ij*(# infected_j)))
+  beta_I <- function(t, i){
+    
+    #(sum_j(beta_ij*(# infected_j)))
     #sum all of the beta_ij's for all of the infected IDs
     
     #are neighbors are infected?
     is_I <- states_matrix[,t] %in% "I" 
     #beta's of the infected neighbors
-    beta_neighbors <- trans2[i,,t][is_I]
+    beta_infecteds <- beta_t[i,,t][is_I]
     
-    #rate of transmission from S -> I 
-    1 - exp(-1*sum(beta_neighbors)) #number infected
+    #summed beta for all infected neighbors
+    return(sum(beta_infecteds))
   }
   
   #which agents are not NA? NA usually because plant didn't germinate.
@@ -212,32 +202,25 @@ IBM <- function(grid_df, Type, spatialdecay=.001){
   
   for(t in 1:(tfinal-1)){ #at every time step
     #get alpha_i(t) (inoculum to plant transmission coef)
-    alpha_i <- C_to_Ia(t)
+    alpha_i <- alpha_t(t)
     
     for(i in germinated){ #for every GERMINATED individual
       P <- runif(1, 0, 1)#draw random number
       
       if(states_matrix[i,t]=="C"){
         #calculate the probability of each transition
-        CS <- C_to_S #inoc decay 
-        CI <- C_to_Ia(t)[i] + C_or_S_to_Ib(t, i) #infection
-        CC <- 1 - CS - CI #stasis
+        CI <- 1 - exp(-(alpha_i[i] + beta_I(t, i)))
         
-        #decide what the fate (state change) will be
-        outcome_num <- 1 + (P < CS) + (P < (CS + CI))
-        #C becomes... S if 3, I if 2, C if 1
-        new_state <- switch(outcome_num, 'C', 'I', 'S')
+        #decide if individual gets infected
+        new_state <- ifelse(rbinom(1, 1, prob = CI)==1, 'I', 'C')
         
       }else{
         if(states_matrix[i,t]=="S"){
           #calculate the probability of each transition
-          SI <- C_or_S_to_Ib(t, i)
-          SS <- 1 - SI
+          SI <- 1 - exp(-beta_I(t, i))
           
-          #decide what the fate (state change) will be
-          outcome_num <- 1 + (P < SI)
-          #S becomes... I if 2, S if 1
-          new_state <- switch(outcome_num, 'S', 'I')
+          #decide if individual gets infected
+          new_state <- ifelse(rbinom(1, 1, prob = SI)==1, 'I', 'S')
           
         }else{
           #if state is I, stays I always
@@ -254,7 +237,7 @@ IBM <- function(grid_df, Type, spatialdecay=.001){
 #run epidemic----
 
 testrunNN <- IBM(grid_df, Type = "NN")
-testrunKernel <- IBM(grid_df, Type = "Kernel", spatialdecay = .002)
+testrunKernel <- IBM(grid_df, Type = "Kernel", spatialdecay = .001)
 head(testrunNN)
 head(testrunKernel)
 

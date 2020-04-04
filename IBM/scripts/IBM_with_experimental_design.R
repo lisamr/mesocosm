@@ -33,17 +33,14 @@ dist_decay <- function(x, a=14.9, d=.36, tau=3.73, sigma=.00099){
   y/y0
 }
 
-### transmission from C -> S ###
-#inoculum decay rate invariant of species.
-delta <- 1/5 #1/average number of days inoc stays around
 
-### transmission from S -> I ###
+### SECONDARY TRANSMISSION ###
 #create a matrix of the beta_ij values. Assume that pairwise values will control the amplitude of beta(t). these will come from empirical data, but will just make them up for now.
 
 #create matrix of amplitudes of the beta_ij 
 beta_ij_t <- make_beta_ij_t(comp)
 
-### transmission from C -> I ###
+### PRIMARY TRANSMISSION ###
 #rate of infection from inoculum to plant. varies by species and time
 alpha_i_t <- make_alpha_i_t(comp)
 
@@ -57,15 +54,15 @@ plot_maps(spdf_list[[41]]) #can take ~15sec. if error, try again.
 
 #run epidemic----
 
-#for every individual, if state==C, then C->C, C->S, or C->I; if state==S, then S->S, or S->I; if state==I, then always stays I. Each transition has a probability and the fate of the transition determined by a value drawn from a uniform distribution between 0 and 1. Will need to loop through every individual every time step. At each time step, record the state of every individual. Output should be a matrix of states, with rows equalling # individuals and cols equalling # time steps. 
+#for every individual, if state==C, then C->C or C->I; if state==S, then S->S, or S->I; if state==I, then always stays I. the fate of the transition determined by a probabilistic binomial process. Will need to loop through every individual every time step. At each time step, record the state of every individual. Output should be a matrix of states, with rows equalling # individuals and cols equalling # time steps. 
 
 ptm <- proc.time()# Start the clock!
 IBM_list_NN <- lapply(spdf_list, function(x) IBM(x, "NN") )
-howlongIBM_NN <- proc.time() - ptm# 90 seconds
+howlongIBM_NN <- proc.time() - ptm# 77 seconds
 
 ptm <- proc.time()# Start the clock!
 IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .001) )#spatialdecay=.001 in paper, but more likely .0025 in your system.
-howlongIBM_Kernel <- proc.time() - ptm# 66 seconds
+howlongIBM_Kernel <- proc.time() - ptm# 55 seconds
 
 #save IBM output
 saveRDS(IBM_list_NN, 'IBM/outputs/IBM_list_NN.RDS')
