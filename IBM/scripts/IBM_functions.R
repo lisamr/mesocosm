@@ -193,25 +193,18 @@ IBM <- function(grid_df, Type, spatialdecay=.001){
   for(t in 1:(tfinal-1)){ #at every time step
     #get alpha_i(t) (inoculum to plant transmission coef)
     alpha_i <- alpha_t(t)
-    
     for(i in germinated){ #for every GERMINATED individual
-      P <- runif(1, 0, 1)#draw random number
-      
       if(states_matrix[i,t]=="C"){
-        #calculate the probability of each transition
+        #calculate the probability of infection
         CI <- 1 - exp(-(alpha_i[i] + beta_I(t, i)))
-        
         #decide if individual gets infected
         new_state <- ifelse(rbinom(1, 1, prob = CI)==1, 'I', 'C')
-        
       }else{
         if(states_matrix[i,t]=="S"){
-          #calculate the probability of each transition
+          #calculate the probability of infection
           SI <- 1 - exp(-beta_I(t, i))
-          
           #decide if individual gets infected
           new_state <- ifelse(rbinom(1, 1, prob = SI)==1, 'I', 'S')
-          
         }else{
           #if state is I, stays I always
           new_state <- 'I'

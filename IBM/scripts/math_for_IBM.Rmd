@@ -56,10 +56,28 @@ $$
 
 In the IBM simulation, I run a loop that says at every time step, for every individual, determine if there will be stasis or a transition. A random draw from a binomial distribution is pulled, determined by the probabilities defined above, deciding the "fate" of each individual's next state. I record the states of all individuals for the duration of the simulation. 
 
+----
+
+I'm going to rewrite the equations a little differently.  
 
 
+The probability of infection for challenged individuals i of species s at time t is  
+$$P_{C \rightarrow I,i}(t) = 1 - \text{exp}(-\alpha_i(t) - \sum_{j\in \text{I}} \beta_{ij}(t) \cdot k(d_{ij}) \space) $$ 
+where j includes all infected individuals of species 1...S.
 
 
+The probability of infection for susceptible individuals i of species s at time t is  
+$$P_{S \rightarrow I,i}(t) = 1 - \text{exp}(-\sum_{j \in \text{I}} \beta_{ij}(t) \cdot k(d_{ij}) \space) $$ 
 
+Primary and secondary transmission rates, which scale depending on species identity of the recipient $i$ and donor $j$, are defined as
 
+$$
+\begin{aligned}
+\beta_{ij}(t) &= b_{ij} \space \text{exp}(\gamma \space[ \text{log}(t/t_q)]^2 \space) \\
+\alpha_{i}(t) &= a_i\space \text{exp}(-r\space t)
+\end{aligned}
+$$
+
+Contact rates decay with distance $d$, described with a negative exponential quadratic function 
+$$k(d) =   \text{exp}(-\sigma \space d^2) $$
 

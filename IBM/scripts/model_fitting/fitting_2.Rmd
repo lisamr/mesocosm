@@ -1,0 +1,737 @@
+---
+title: "Fitting_2"
+author: "Lisa Rosenthal"
+date: "4/7/2020"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstan)
+library(rethinking)
+library(tidyverse)
+library(tidybayes)
+library(abind)
+library(shinystan)
+rm(list=ls())
+
+#convienence functions
+headmat <- function(matrix, nrow=6, ncol=6) matrix[1:nrow, 1:ncol]
+
+```
+
+## Simple SIR model  
+
+Let's say there are 3 types of plants: those that are inoculated/challenged (C), susceptible (S), and infected (I). We can observe the states of individuals $i=1...n$ at times $t=1...T_{f}$. The total number of individuals in each state at time $t$ are $C_t$, $S_t$, and $I_t$. Challenged individuals can become infected either through inoculum-plant transmission at a rate $\alpha$ or plant-plant transmission at a rate $\beta I$. Since we assume that inoculum can only infect individuals a short distance away (i.e. the "challenged" individuals), susceptible individuals can only be infected through plant-plant transmission.  
+
+We need to model the transitions $C \rightarrow I$ and $S \rightarrow I$. The approximated probability of either a challenged or susceptible individual $i$ becoming infected at time $t$ conditional upon $I_{t-1}$, the infectious population from the previous time step, are  
+
+\begin{align}
+\text{P}(i \in I_t | i \in C_{t-1}, I_{t-1}) = 1 - \exp(-(\alpha + \beta I_{t-1}))\\
+\text{P}(i \in I_t | i \in S_{t-1}, I_{t-1}) = 1 - \exp(-\beta I_{t-1}).
+\end{align}
+
+The likelihood of infection for each individual is a binomial process determined by the probabilities defined in (1) and (2).  
+
+## Simulate data  
+
+For now, I'm going to ignore heterogeneity in space and species, and assume transmission coefficients do not vary with time. 
+
+```{r}
+source('IBM/scripts/IBM_functions.R')
+
+#starting parameters
+pinoc <- .1 #percent inoculated
+s <- 1 #number of spp
+spp <- "sp1"
+tfinal <- 6 #time steps
+beta <- .05
+alpha <- .1
+r <- 2 #interplanting distance in cm
+nreps <- 10
+
+#simulate communities
+grid <- replicate(nreps, sample_community(1, pinoc, r)) #function creates community in a 9.5in square tray, plants in hexagonal grid
+N <- sapply(grid, length) #number of individuals
+
+#plot_maps(grid[[1]])
+
+#run simulation
+f_sim1 <- function(grid, N, pinoc=pinoc, s=s, spp=spp, tfinal=tfinal, beta=beta, alpha=alpha, r=r){
+
+  #keep track of all individuals' states
+  agents <- grid@data
+  states_matrix <- matrix(NA, nrow=N, ncol = tfinal)
+  states_matrix[,1] <- as.character(agents$state0)
+  
+  #vectors denoting specific states
+  challenged <- as.numeric(agents$state0=='C')
+  susceptible <- 1-challenged
+  infected <- rep(0, N)
+  
+  #Run the simulation
+  for(t in 1:(tfinal-1)){ #at every time step
+    
+    #calculate probabilities of infections
+    P_ci <- (1 - exp(-(alpha + beta*sum(infected))))*challenged
+    P_si <- (1 - exp(-beta * sum(infected)))*susceptible
+    
+    #generate new infections
+    CI <- rbinom(N, 1, P_ci)
+    SI <- rbinom(N, 1, P_si)
+    new_infections <- CI + SI
+    
+    #update states
+    challenged <- challenged - CI
+    susceptible <- susceptible - SI
+    infected <- infected + new_infections
+    states_matrix[,t+1][challenged==1] <- 'C'
+    states_matrix[,t+1][susceptible==1] <- 'S'
+    states_matrix[,t+1][infected==1] <- 'I'
+  }
+  
+  return(states_matrix)
+}
+
+#do simulation multiple times
+out <- NULL
+for(i in 1:nreps){
+  out[[i]] <- as.data.frame(f_sim1(grid = grid[[i]], N=N[i], pinoc=pinoc, s=s, spp=spp, tfinal=tfinal, beta=beta, alpha=alpha, r=r))
+  out[[i]]$rep <- i
+  out[[i]]$ID <- 1:N[i]
+}
+out <- bind_rows(out) 
+
+#visualize
+dat <- out %>% 
+  pivot_longer(cols = starts_with("V"), names_to = 'time', values_to = 'state') %>% 
+  mutate(time = as.numeric(gsub("V", '', time)), ID = as.factor(ID))
+
+#for every individual
+ggplot(filter(dat, rep==1), aes(time, ID, fill=state)) +
+  geom_tile() +
+  scale_fill_manual(values = c('C' = 'orange', 'S' = 'steelblue3', 'I' = 'indianred')) +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+#as a population
+dat_pop <- dat %>% count(rep, time, state)
+ggplot(dat_pop, aes(time, n, color=state, group=interaction(state, rep))) +
+  geom_line(alpha=.5) +
+  scale_color_manual(values = c('C' = 'orange', 'S' = 'steelblue3', 'I' = 'indianred'))
+
+#plot_spread_map(grid, states_matrix, animate = T) #transmission is spatially random and fast
+
+```
+
+
+Generate two types of data: non-replicated and replicated. I started with writing a model with non-replicated, got it to mostly work. Now I'm working on adding complexity to the replicated data. 
+```{r}
+
+#non-replicated
+outNR <- as.data.frame(f_sim1(grid = grid[[1]], N=N[1], pinoc=pinoc, s=s, spp=spp, tfinal=tfinal, beta=beta, alpha=alpha, r=r))
+outNR$rep <- 1
+outNR$ID <- 1:N[1]
+dat <- outNR %>% 
+  pivot_longer(cols = starts_with("V"), names_to = 'time', values_to = 'state') %>% 
+  mutate(time = as.numeric(gsub("V", '', time)), ID = as.factor(ID))
+dat_pop <- dat %>% count(rep, time, state)
+
+
+#replicated
+#put data into an array
+nreps = 2
+outR <- NULL
+for(i in 1:nreps){
+  outR[[i]] <- f_sim1(grid = grid[[i]], N=N[i], pinoc=pinoc, s=s, spp=spp, tfinal=tfinal, beta=beta, alpha=alpha, r=r)
+}
+outR <- abind::abind(outR, along = 3) #array of states.
+```
+
+
+## Fitting model in Stan  
+
+I'm going to estimate alpha and beta for this simple disease model. This will act as the building block for more complex models. I'll show how to model it with aggregated data (binomial distribution) and disaggregated (bernoulli random variables). Modeling individuals independently with the bernoulli likelihood should make it easier to add more complexity in the future when all the individuals are different.  
+
+#### Aggregated data modeled with binomial distribution:  
+Code for non-replicated data. Runs really fast!
+```{r}
+binom_NR = 
+"
+data { 
+  //declare variables
+  int<lower=0> N; //number of individuals in each tray
+  int<lower=0> t; //number of time points
+  //states
+  int<lower = 0, upper =N> C[t];
+  int<lower = 0, upper =N> S[t]; 
+  int<lower = 0, upper =N> I[t];
+}
+transformed data { 
+  //Calculate transitions, based on change in states
+  int<lower=0, upper = N> z_ci[t-1]; 
+  int<lower=0, upper = N> z_si[t-1];
+  
+  //I think it should be for(i in 2:t) z_ci[2] = C[1] - C[2]?
+    for(i in 1:(t-1)){
+    z_ci[i] = C[i] - C[i+1]; //new infections of C
+    z_si[i] = S[i] - S[i+1]; //new infections of S
+    }
+}
+parameters {
+  real<lower=0, upper = 1> alpha; //I think it's also between 0 and 1.
+  real<lower=0, upper = 1> beta;
+}
+
+model {
+  real p_ci; //prob. of C -> I
+  real p_si; //prob. of S -> I
+  
+  //priors
+  alpha ~ beta(1,5); //previously had at gamma(1,1)
+  beta ~ beta(1,5);
+
+ //generate number of infecteds from C and S at each time
+ //C, S, and I are the number of individuals in that state at time t
+ for(i in 1:(t-1)){
+    p_ci = 1 - exp(-(alpha + beta*I[i]));
+    z_ci[i] ~ binomial(C[i], p_ci); 
+  //only define z_si when there are infections. distribution is degenerate and STAN has trouble
+    if(I[i] > 0){
+      p_si = 1 - exp(-(beta*I[i]));
+      z_si[i] ~ binomial(S[i], p_si); 
+    }
+ }
+}
+"
+binom_NR_mod = stan_model(model_code = binom_NR)
+
+
+# format data for STAN
+dat_NR <- dat_pop %>% 
+  pivot_wider(names_from = state, values_from = n, values_fill = list(n=0)) %>% 
+  dplyr::select(-time) %>% 
+  as.list %>% 
+  c(t = as.integer(tfinal)) %>% list_modify(N=N[1])
+
+str(dat_NR) #make sure integers are classified as such
+
+fit_binom_NR = sampling(binom_NR_mod,dat_NR, iter = 2000, chains = 3)
+
+#check it out
+precis(fit_binom_NR) %>% plot #covers the parameters. Interval of alpha is big. 
+stan_dens(fit_binom_NR)
+print(fit_binom_NR,digits = 3)
+traceplot(fit_binom_NR)
+
+```
+
+
+
+#### Bernoulli distribution
+
+Here's the code for non-replicated data. same results as binomial, just much slower. 
+```{r}
+#need to index data by time t AND individual N
+bern_NR = 
+"
+data { 
+  //declare variables
+  int<lower=0> N; //number of individuals
+  int<lower=0> t; //number of time points
+  int<lower = 0, upper =N> C[N,t]; //states
+  int<lower = 0, upper =N> S[N,t]; 
+  int<lower = 0, upper =N> I[N,t];
+}
+transformed data { 
+  //Calculate transitions, based on change in states
+  int<lower=0, upper = N> z_ci[N,t-1]; 
+  int<lower=0, upper = N> z_si[N,t-1];
+  for(T in 1:(t-1)){
+    for(i in 1:N){
+      z_ci[i,T] = C[i,T] - C[i,T+1]; //new infections of C
+      z_si[i,T] = S[i,T] - S[i,T+1]; //new infections of S
+    }
+  }
+}
+parameters {
+  real<lower=0, upper = 1> alpha;
+  real<lower=0, upper = 1> beta;
+}
+
+model {
+  real p_ci;
+  real p_si;
+  
+  //priors
+  alpha ~ beta(1,5);
+  beta ~ beta(1,5);
+
+ //generate number of infecteds from C and S at each time
+ //C, S, and I are the number of individuals in that state at time t
+ for(T in 1:(t-1)){
+  for(i in 1:N){
+    if(C[i,T]){ //transition for challenged
+      p_ci = 1 - exp(-(alpha + beta*sum(I[,T])));
+      z_ci[i,T] ~ bernoulli(p_ci); 
+    }
+    if(sum(I[,T]) > 0 && S[i,T]){ //transition for susceptible
+      p_si = 1 - exp(-beta*sum(I[,T]));
+      z_si[i,T] ~ bernoulli(p_si); 
+      }
+    }
+ }
+}
+"
+mod_bern_NR = stan_model(model_code = bern_NR)
+
+#format data for model
+# format data for STAN
+dat_NR2 <- list(
+  N = nrow(outNR), 
+  t = as.integer(tfinal),
+  C = matrix(as.numeric(outNR[,1:tfinal] == "C"), ncol = tfinal),
+  S = matrix(as.numeric(outNR[,1:tfinal] == "S"), ncol = tfinal),
+  I = matrix(as.numeric(outNR[,1:tfinal] == "I"), ncol = tfinal)
+)
+str(dat_NR2) #make sure integers are classified as such
+
+
+
+#run model
+fit_bern_NR = sampling(mod_bern_NR,dat_NR2, iter = 1000, chains = 2, cores = 2)
+
+#check it out
+precis(fit_bern_NR) 
+par(mfrow=c(1,2)) 
+precis(fit_bern_NR) %>% plot; precis(fit_binom_NR) %>% plot #binomial and bernoulli the same. 
+par(mfrow=c(1,1)) 
+traceplot(fit_bern_NR)
+
+
+my_sso <- launch_shinystan(fit_bern_NR)
+```
+
+
+Trying the bernoulli model with replicated data.
+```{r}
+# format data for STAN
+dat_R1 <- list(
+  N = as.integer(dim(outR)[1]),
+  J = max(nreps),
+  t = as.integer(tfinal),
+  ID = as.integer(1:dim(outR)[3]),
+  C = abind(lapply(1:nreps, function(i) matrix(as.numeric(outR[,,i] == "C"), ncol = tfinal)), along = 3),
+  S = abind(lapply(1:nreps, function(i) matrix(as.numeric(outR[,,i] == "S"), ncol = tfinal)), along = 3),
+  I = abind(lapply(1:nreps, function(i) matrix(as.numeric(outR[,,i] == "I"), ncol = tfinal)), along = 3)
+)
+str(dat_R1) #make sure integers are classified as such
+
+mod_bern1 <- stan_model(file = "IBM/scripts/model_fitting/sir_bernoulli1.stan")
+fit_bern1 <- sampling(mod_bern1, dat_R1, iter = 1000, chains = 2, cores = 2)
+
+#alpha sd is waaaay higher than beta. But that might be that there are a lot fewer chalenged individuals to estimate that parameter. The estimates are ok though, albeit with big CI.
+#having 2 seperate varying intercepts for C->I and S->I underpredicts alpha.
+precis(fit_bern1, depth = 2)
+plot(precis(fit_bern1, depth = 2, pars = c('alpha', 'beta', 'zz')))
+precis(fit_bern1, pars = 'beta') 
+traceplot(fit_bern1) #need to non center probably
+post <- extract.samples(fit_bern1)
+dens(post$beta)
+sd(post$beta)
+
+
+#2 independent random effects (gamma distributed) are added to P(C-I) and P(S-I). Took FOREVER.
+mod_bern1_1 <- stan_model(file = "IBM/scripts/model_fitting/sir_bernoulli1-1.stan")
+fit_bern1_1 <- sampling(mod_bern1_1, dat_R1, iter = 500, chains = 1, cores = 1)
+precis(fit_bern1_1, depth = 2)
+precis(fit_bern1_1, depth = 2, pars = c('alpha', 'beta')) %>% plot
+traceplot(fit_bern1_1)
+
+
+#try to fit where random effects are embedded within alpha and beta. individual estimates of alpha and beta look good, but the estimated mean too high and doesn't make sense.
+mod_bern1_2 <- stan_model(file = "IBM/scripts/model_fitting/sir_bernoulli1-2.stan")
+fit_bern1_2 <- sampling(mod_bern1_2, dat_R1, iter = 500, chains = 1, cores = 1)
+precis(fit_bern1_2, depth = 2)
+precis(fit_bern1_2, depth = 2, pars = c('alpha', 'beta')) %>% plot
+traceplot(fit_bern1_2)
+
+#try to fit where random effects multiply alpha and beta. really large intervals for both a and b.
+mod_bern1_3 <- stan_model(file = "IBM/scripts/model_fitting/sir_bernoulli1-3.stan")
+fit_bern1_3 <- sampling(mod_bern1_3, dat_R1, iter = 500, chains = 1, cores = 1)
+precis(fit_bern1_3, depth = 2)
+precis(fit_bern1_3, depth = 2, pars = c('alpha', 'beta')) %>% plot
+traceplot(fit_bern1_3)
+
+
+dens(rgamma2(10000, .04, .59))
+rgamma2(100000, .2, .2) %>% dens
+rgamma2(100000, .2, .2) %>% mean
+rbeta(100000, 1, 5) %>% dens
+```
+
+
+
+All of the models above estimate alpha and beta within the ranges of what I used to simulate the data. That's a good sign. The model with replicated data has smaller intervals of alpha, which is what I'd expect. The aggregated data model is really fast, but unfortunately the disaggregated one isn't vectorized so it goes really slow.  
+
+Below I try to add in more complexity by allowing 1) the transmission coefficients to vary with time, 2) species to vary in probability of infection given contact, and 3) contact networks to vary by the spatial arrangements of individuals. I will need to use the bernoulli model from here on out.  
+
+## Simulate more heterogeneity  
+
+- transmission coefs vary in time  
+- transmission decays with distance . 
+- species vary in suceptibility and infectivity (worked on last)  
+
+```{r}
+
+#NEW FUNCTIONS----
+
+#beta will be a product of contact rate X probability of transmission given contact
+#contact rate may vary with distance
+dist_decay <- function(x, Sigma){
+  #equation from Kleczkowski et al. (1997).  sigma scales the rate of the decay. Other parameters in the paper affect a constant, but it cancels out when I standardize it.
+  #probably a way to add a gaussian distribution as the predictor instead. 
+  exp(-Sigma*x^2)
+}
+
+#probability of transmission given contact varies with time
+alpha_curve <- function(t, amp=.4, rate=1) amp*exp(-rate*t)
+beta_curve <- function(t, amp=.2, rate=3, tq=11) {
+  #amp=amplitude
+  #rate=variance of curve. larger is less variance.
+  #tq=time of peak
+  amp*exp(-rate*(log(t/tq))^2)
+}
+
+#will assume different spatial structures. Contact may be equally mixed, be between nearest neighbor only, or decay with distance. 
+
+dist_equal <- function(grid) matrix(1, nrow = length(grid), ncol = length(grid))#homogenously mixed, contacts all same
+dist_NN <- function(grid) matrix(as.numeric(rgeos::gTouches(grid, byid = T)), nrow = length(grid), ncol = length(grid)) #nearest neighbor
+dist_euc <- function(grid) as.matrix(dist(cbind(grid$x, grid$y)))*10 #euclidian distance
+f_kernel <- function(dist_matrix, sigma){
+  contact_rt <- dist_decay(dist_matrix, Sigma = sigma)
+  diag(contact_rt) <- 0 #Self can't infect self.
+  return(contact_rt)
+}
+
+#that introduces new parameters: amp_a, rate_a, amp_b, rate_b, tq, sigma. 
+#When I model different species, I'm going to assume that species change just the amplitude. Possibly a restrictive assumption, but can't introduce too many parameters. 
+
+
+#PARAMETERS----
+
+#same parameters as above
+pinoc <- .05 #percent inoculated
+s <- 1 #number of spp
+spp <- "sp1"
+tfinal <- 20 #time steps
+r <- 2
+
+#new parameters (will be estimated in model fitting)
+amp_a <- .6
+rate_a <- .5
+amp_b <- .1
+rate_b <- 1
+tq <- 10
+sigma <- .001 #higher value -> less dispersal
+pinoc <- .1
+
+#simulate communities
+grid <- replicate(nreps, sample_community(1, pinoc, r)) 
+N <- sapply(grid, length)
+
+
+#visualize transmission parameters
+dist_matrix <- dist_euc(grid[[1]])
+contact_mat <- f_kernel(dist_matrix, sigma = sigma) #contact matrix. for NN and mass action, contact matrix will be the same as the dist_matrix.
+
+par(mfrow=c(1,2))
+#alpha and beta
+xtime <- seq(0,20, by=.1)
+plot(xtime, alpha_curve(t=xtime, amp=amp_a, rate=rate_a), ylim=c(0,1), type='l', col='steelblue', lwd=2, xlab='days', ylab='transmission rate')
+lines(xtime, beta_curve(t=xtime, amp = amp_b, rate=rate_b, tq=tq), type='l', col='indianred',lwd=2)
+legend('topright', legend = c('alpha', 'beta'), fill = c('indianred', 'steelblue'))
+#distance decay
+xdist <- seq(0,50, by=1) #distance in mm
+plot(xdist, dist_decay(xdist, Sigma = sigma), type="l", xlab='distance (mm)', ylab="P(contact)", lwd=2)
+legend('topright', legend = c('distance decay'), fill = c('black'))
+par(mfrow=c(1,1))
+
+
+
+############################################################
+#simulate
+############################################################
+
+fsim2 <- function(grid, N, sigma, tfinal, amp_a, rate_a, amp_b, rate_b){
+ 
+  #contact matrix. for NN and mass action, contact matrix will be the same as the dist_matrix.
+  dist_matrix <- dist_euc(grid)
+  contact_mat <- f_kernel(dist_matrix, sigma) 
+  
+  #keep track of all individuals' states
+  agents <- grid@data
+  states_matrix <- matrix(NA, nrow=N, ncol = tfinal)
+  states_matrix[,1] <- as.character(agents$state0)
+  
+  #vectors denoting specific states
+  challenged <- as.numeric(agents$state0=='C')
+  susceptible <- 1-challenged
+  infected <- rep(0, N)
+  
+  #Run the simulation
+  for(t in 1:(tfinal-1)){ 
+    
+    #calculate prob of transmission given contact
+    alpha <- alpha_curve(t = t, amp = amp_a, rate = rate_a)
+    beta <- beta_curve(t = t, amp = amp_b, rate = rate_b)
+    
+    #calculate probabilities of infections
+    P_ci <- (1 - exp(-(alpha + beta*(contact_mat %*% infected))))*challenged
+    P_si <- (1 - exp(-beta*(contact_mat %*% infected)))*susceptible
+    
+    #generate new infections
+    CI <- rbinom(N, 1, P_ci)
+    SI <- rbinom(N, 1, P_si)
+    new_infections <- CI + SI
+    
+    #update states
+    challenged <- challenged - CI
+    susceptible <- susceptible - SI
+    infected <- infected + new_infections
+    states_matrix[,t+1][challenged==1] <- 'C'
+    states_matrix[,t+1][susceptible==1] <- 'S'
+    states_matrix[,t+1][infected==1] <- 'I'
+  }
+  return(states_matrix)
+}
+
+states_matrix <- fsim2(grid = grid[[1]], N = N[1], sigma, tfinal, amp_a, rate_a, amp_b, rate_b)
+
+dat <- data.frame(ID = grid[[1]]$ID, states_matrix) %>% 
+  pivot_longer(cols = starts_with("X"), names_to = 'time', values_to = 'state') %>% 
+  mutate(time = as.numeric(gsub("X", '', time)))
+
+
+#visualize
+#for every individual
+ggplot(dat, aes(time, ID, fill=state)) +
+  geom_tile() +
+  scale_fill_manual(values = c('C' = 'orange', 'S' = 'steelblue3', 'I' = 'indianred')) +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+#as a population
+dat_pop <- dat %>% count(time, state)
+ggplot(dat_pop, aes(time, n, color=state)) +
+  geom_line() +
+  scale_color_manual(values = c('C' = 'orange', 'S' = 'steelblue3', 'I' = 'indianred'))
+
+```
+
+
+## Fit model in Stan with more heterogeneity
+
+**Issues: hard to get the sampling started. must supply model with good start values. haven't been able to estimate all of the parameters at once. overfitting probably? need to figure out how to add in replicates. after that, can see how species affects amp_a and amp_b with slopes that vary with species?**
+
+Fitting with no replicates first. 
+```{r}
+#need to index data by time t AND individual N
+
+#model written in file 'SIR2.stan'
+mod2 <- stan_model(file = 'IBM/scripts/model_fitting/SIR2.stan')
+
+# format data for STAN
+dat_stan <- list(
+  N = as.integer(N[1]),
+  t = as.integer(tfinal),
+  C = matrix(as.integer(states_matrix=="C"), nrow = N[1]),
+  S = matrix(as.integer(states_matrix=="S"), nrow = N[1]),
+  I = matrix(as.integer(states_matrix=="I"), nrow = N[1]),
+  dist_mat =  dist_matrix,
+  sigma_upper = .1
+)
+str(dat_stan)
+
+initf1 <- function() {
+  list(amp_a = .6, amp_b = .1, rate_b = 1, sigma = .005)
+}
+
+#run model
+fit2 = sampling(mod2,dat_stan, iter = 1500, chains = 1, init = initf1)
+
+#check it out
+#amp_a=.6, amp_b=.1, rate_b=1, sigma=.001
+precis(fit2, digits = 4) %>% plot #sigma slightly high, amp_b slightly high
+stan_dens(fit2)
+traceplot(fit2)
+
+
+amp_a <- .6
+rate_a <- .5
+amp_b <- .1
+rate_b <- 1
+tq <- 10
+sigma <- .005
+
+
+#scratch
+headmat(dist_matrix^2)
+headmat(dist_matrix*dist_matrix)
+#how to square a matrix in stan. loop over the vectors. 
+newmat <- matrix(NA, nrow=nrow(dist_matrix), ncol=nrow(dist_matrix))
+for(i in 1:nrow(dist_matrix)){
+  newmat[,i] <- dist_matrix[,i] * dist_matrix[,i]}
+headmat(newmat)
+
+headmat(dist_matrix)
+headmat((dist_matrix[,1]) %*% dist_matrix)
+contact_mat <- f_kernel(dist_matrix, .005)
+headmat(contact_mat)
+testmat <- (contact_mat %*% dat_stan$I)
+headmat(testmat)
+melted_cormat <- reshape2::melt(testmat) %>% rename(time="Var2", ID="Var1")
+ggplot(data = melted_cormat, aes(x=time, y=ID, fill=value)) + 
+  geom_tile()+scale_fill_viridis_c()
+```
+
+### stationary alpha/beta, estimate sigma
+
+```{r}
+
+#NEW FUNCTIONS----
+
+#beta will be a product of contact rate X probability of transmission given contact
+#contact rate may vary with distance
+dist_decay <- function(x, Sigma){
+  #equation from Kleczkowski et al. (1997).  sigma scales the rate of the decay. Other parameters in the paper affect a constant, but it cancels out when I standardize it.
+  exp(-Sigma*x^2)
+}
+
+#probability of transmission given contact varies with time
+alpha_curve <- function(t, amp=.4, rate=1) amp*exp(-rate*t)
+beta_curve <- function(t, amp=.2, rate=3, tq=11) {
+  #amp=amplitude
+  #rate=variance of curve. larger is less variance.
+  #tq=time of peak
+  amp*exp(-rate*(log(t/tq))^2)
+}
+
+#will assume different spatial structures. Contact may be equally mixed, be between nearest neighbor only, or decay with distance. 
+
+dist_equal <- function(grid) matrix(1, nrow = length(grid), ncol = length(grid))#homogenously mixed, contacts all same
+dist_NN <- function(grid) matrix(as.numeric(rgeos::gTouches(grid, byid = T)), nrow = length(grid), ncol = length(grid)) #nearest neighbor
+dist_euc <- function(grid) as.matrix(dist(cbind(grid$x, grid$y)))*10 #euclidian distance
+f_kernel <- function(dist_matrix, sigma){
+  contact_rt <- dist_decay(dist_matrix, Sigma = sigma)
+  diag(contact_rt) <- 0 #Self can't infect self.
+  return(contact_rt)
+}
+
+#that introduces new parameters: amp_a, rate_a, amp_b, rate_b, tq, sigma. 
+#When I model different species, I'm going to assume that species change just the amplitude. Possibly a restrictive assumption, but can't introduce too many parameters. 
+
+
+#PARAMETERS----
+
+#same parameters as above
+pinoc <- .05 #percent inoculated
+s <- 1 #number of spp
+spp <- "sp1"
+tfinal <- 20 #time steps
+grid <- sample_community(1, pinoc, 1) 
+N <- length(grid)
+
+#new parameters (will be estimated in model fitting)
+alpha <- .6
+beta <- .05
+sigma <- .005
+dist_matrix <- dist_euc(grid)
+contact_mat <- f_kernel(dist_matrix, sigma = sigma) #contact matrix. for NN and mass action, contact matrix will be the same as the dist_matrix.
+
+#keep track of all individuals' states
+agents <- grid@data
+states_matrix <- matrix(NA, nrow=N, ncol = tfinal)
+states_matrix[,1] <- as.character(agents$state0)
+
+#vectors denoting specific states
+challenged <- as.numeric(agents$state0=='C')
+susceptible <- 1-challenged
+infected <- rep(0, N)
+
+
+############################################################
+#simulate
+############################################################
+
+#Run the simulation
+for(t in 1:(tfinal-1)){ 
+
+  #calculate probabilities of infections
+  P_ci <- (1 - exp(-(alpha + beta*(contact_mat %*% infected))))*challenged
+  P_si <- (1 - exp(-beta*(contact_mat %*% infected)))*susceptible
+  
+  #generate new infections
+  CI <- rbinom(N, 1, P_ci)
+  SI <- rbinom(N, 1, P_si)
+  new_infections <- CI + SI
+  
+  #update states
+  challenged <- challenged - CI
+  susceptible <- susceptible - SI
+  infected <- infected + new_infections
+  states_matrix[,t+1][challenged==1] <- 'C'
+  states_matrix[,t+1][susceptible==1] <- 'S'
+  states_matrix[,t+1][infected==1] <- 'I'
+}
+
+dat <- data.frame(ID = agents$ID, states_matrix) %>% 
+  pivot_longer(cols = starts_with("X"), names_to = 'time', values_to = 'state') %>% 
+  mutate(time = as.numeric(gsub("X", '', time)))
+
+
+#visualize
+#for every individual
+ggplot(dat, aes(time, ID, fill=state)) +
+  geom_tile() +
+  scale_fill_manual(values = c('C' = 'orange', 'S' = 'steelblue3', 'I' = 'indianred')) +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+#as a population
+dat_pop <- dat %>% count(time, state)
+ggplot(dat_pop, aes(time, n, color=state)) +
+  geom_line() +
+  scale_color_manual(values = c('C' = 'orange', 'S' = 'steelblue3', 'I' = 'indianred'))
+
+# format data for STAN
+dat_stan <- list(
+  N = as.integer(N),
+  t = as.integer(tfinal),
+  C = matrix(as.integer(states_matrix=="C"), nrow = N),
+  S = matrix(as.integer(states_matrix=="S"), nrow = N),
+  I = matrix(as.integer(states_matrix=="I"), nrow = N),
+  dist_mat =  dist_matrix,
+  sigma_upper = .1
+)
+
+#model written in file 'SIR2-2.stan'
+mod2_2 <- stan_model(file = 'IBM/scripts/model_fitting/SIR2-2.stan')
+
+#run model
+fit2_2 = sampling(mod2_2, dat_stan, iter = 2000, chains = 2, init=.01)
+
+#check it out
+stan_dens(fit2_2)
+traceplot(fit2_2)
+precis(fit2_2)
+
+#alpha=.6, beta=.05, sigma=.005
+```
+
+
+
+
+
