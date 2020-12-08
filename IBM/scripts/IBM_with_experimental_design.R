@@ -72,6 +72,8 @@ saveRDS(IBM_list_Kernel, 'IBM/outputs/IBM_list_Kernel.RDS')
 IBM_list_NN <- readRDS('IBM/outputs/IBM_list_NN.RDS')
 IBM_list_Kernel <- readRDS('IBM/outputs/IBM_list_Kernel.RDS')
 
+
+
 #visualize single tray----
 
 #### check out a single tray ####
@@ -108,14 +110,14 @@ filter(trt_states_df, SD==.5) %>%
   geom_line(alpha=.5, color='dodgerblue4') +
   facet_grid(cols = vars(richness),
              rows = vars(rand, dens))
-ggsave('IBM/plots/I_over_time_Kernel.pdf')
+#ggsave('IBM/plots/I_over_time_Kernel.pdf')
 
 filter(trt_states_df, SD==.5) %>% 
   ggplot(., aes(time, percI, group=trayID)) +
   geom_line(alpha=.5, color='dodgerblue4') +
   facet_grid(cols = vars(richness),
              rows = vars(rand, dens))
-ggsave('IBM/plots/percI_over_time_Kernel.pdf')
+#ggsave('IBM/plots/percI_over_time_Kernel.pdf')
 
 #plot I (#inf and %inf) at final time step
 p1 <- trt_states_df %>% filter(time==tfinal, SD==.5) %>% 
@@ -131,7 +133,7 @@ p2 <- trt_states_df %>% filter(time==tfinal, SD==.5) %>%
              rows = vars(rand))
 
 cowplot::plot_grid(p1, p2, labels = c("A", "B"))
-ggsave('IBM/plots/disease_tfinal_Kernel.pdf', width = 10, height = 4.5)
+#ggsave('IBM/plots/disease_tfinal_Kernel.pdf', width = 10, height = 4.5)
 
 #Community competency----
 #community competency can be calculated before the simulation runs
@@ -167,7 +169,7 @@ ggplot(CCsummary2, aes(CC, percI, color=richness)) +
   geom_point() +
   labs(x='community competency', y='% infected') +
   scale_color_viridis_c()
-ggsave('IBM/plots/CC_percI.pdf')
+#ggsave('IBM/plots/CC_percI.pdf')
 ggplot(CCsummary2, aes(CC, percI, color=sp_order)) +
   geom_point() +
   labs(x='community competency', y='% infected') +
@@ -204,6 +206,7 @@ library(tidybayes)
 ind_trials <- suppressWarnings(bind_rows(lapply(1:length(spdf_list), function(i) track_individuals(spdf_list[[i]], IBM_list_Kernel[[i]])))) 
 ind_trials$infected <- ifelse(ind_trials$state_tf=="I", 1, 0)
 ind_trials$trayID <- as.factor(ind_trials$trayID)
+head(ind_trials)
 
 #scale your variables. really helps with the sampler.
 ind_trials$avgCC.s <- Scale(ind_trials$avgCC)
@@ -211,12 +214,12 @@ ind_trials$richness.s <- Scale(ind_trials$richness)
 ind_trials$density.s <- Scale(ind_trials$density)
 ind_trials$nsp1.s <- Scale(ind_trials$nsp1)
 
-#set formula
-f1 <- bf(infected ~ avgCC.s + richness.s + density.s + (1|trayID), family = bernoulli)
+#set formulas. infection probability given species identity and at tray level. 
+f1 <- bf(infected ~ avgCC.s + richness.s + density.s + (1|spID) + (1|trayID), family = bernoulli)
 f2 <- bf(infected ~  richness.s + nsp1.s + (1|trayID), family = bernoulli)
 
 #set priors (probably need to fiddle)
-get_prior(f2, ind_trials)
+get_prior(f1, ind_trials)
 priors1 <- c(set_prior('normal(0,1.5)', class="Intercept"),
              set_prior('normal(0,.5)', class="b"),
              set_prior('exponential(1)', class='sd'))
@@ -226,6 +229,8 @@ ptm <- proc.time()# Start the clock!
 fit1 <- brm(formula = f1, data = ind_trials, prior = priors1, chains = 3, cores = 4)
 fit1 <- add_criterion(fit1, 'loo')
 howlongfit1 <-proc.time() - ptm # 827sec
+fit1
+
 saveRDS(fit1, 'IBM/outputs/fit1_bernoulli.RDS')
 ptm <- proc.time()# Start the clock!
 fit2 <- brm(formula = f2, data = ind_trials, prior = priors1, chains = 3, cores = 4)

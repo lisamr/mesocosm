@@ -235,7 +235,7 @@ plotS_I <- function(IBM_output){
 }
 
 #now plot spatial map of the spread
-plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
+plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T, alpha_intensity=.05){
   #for plotting
   pal <- function(spp) RColorBrewer::brewer.pal(n = length(spp), name = "RdYlBu")
   
@@ -284,7 +284,7 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T){
     
   }else{#plot static plot
     plot <- staticplot + 
-      geom_point(data=tmp_centroids, aes(x, y), shape = ifelse(is.na(tmp_centroids$state), 4, 16), size=4, alpha = ifelse(tmp_centroids$state %in% c("I", NA), .05, 0)) #reduce alpha so it's easier to see
+      geom_point(data=tmp_centroids, aes(x, y), shape = ifelse(is.na(tmp_centroids$state), 4, 16), size=4, alpha = ifelse(tmp_centroids$state %in% c("I", NA), alpha_intensity, 0)) #reduce alpha so it's easier to see
   }
   
   return(plot)
