@@ -65,7 +65,8 @@ length <- width
 #DESIGN (keep the names the same. simplifies downstream functions)
 pinoc <- .1 #percent inoculated at start of experiemnt
 s <- 6 #max number of species
-spp <- c(paste0('sp_', rep(1:s))) #names of species
+#spp <- c(paste0('sp_', rep(1:s))) #names of species
+spp <- c('radish', 'arugula', 'basil', 'green_rom', 'red_rom', 'butter')
 tfinal <- 25 #how many time steps
 comp <- c(.6, .3, .2, .1, 0, 0) #vector of relative "competencies"
 
@@ -97,10 +98,12 @@ alpha_i_t <- make_alpha_i_t(comp)
 #create community----
 #read in list of spatial polygons dataframes for each tray
 #spdf_list <- readRDS('GH_output/species_distributions/spdf_list.RDS')
-spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
+#spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS')
+spdf_list <- readRDS('GH_output/real_experiment/big_experiment_spdf_list_12272020.RDS')
 
 #plot one of them
-#plot_maps(spdf_list[[41]]) #can take ~15sec. if error, try again.
+plot_maps(spdf_list[[41]]) #can take ~15sec. if error, try again.
+
 
 #run epidemic----
 
@@ -110,18 +113,26 @@ spdf_list <- readRDS('GH_output/species_distributions/spdf_list_tighterdens.RDS'
 #IBM_list_NN <- lapply(spdf_list, function(x) IBM(x, "NN") )
 #howlongIBM_NN <- proc.time() - ptm# 77 seconds
 
+#decide which state to use
+#for(i in 1:length(spdf_list)){
+#  spdf_list[[i]]$state0 <- spdf_list[[i]]$state0v2
+#  spdf_list[[i]]$state0v2 <- NULL
+#}
+
 #ptm <- proc.time()# Start the clock!
 #IBM_list_Kernel <- lapply(spdf_list, function(x) IBM(x, "Kernel", spatialdecay = .001) )#spatialdecay=.001 in paper, but more likely .0025 in your system.
 #howlongIBM_Kernel <- proc.time() - ptm# 55 seconds
 
 #save IBM output
 #saveRDS(IBM_list_NN, 'IBM/outputs/IBM_list_NN.RDS')
-#saveRDS(IBM_list_Kernel, 'IBM/outputs/IBM_list_Kernel.RDS')
+#saveRDS(IBM_list_Kernel, 'IBM/outputs/IBM_list_Kernel_ninoc.RDS') #10 ind inoculated proportial to composition
+#saveRDS(IBM_list_Kernel, 'IBM/outputs/IBM_list_Kernel_ninocmostcomp.RDS')#10 ind inoculated of most competent species
 
 #read IBM output
-IBM_list_NN <- readRDS('IBM/outputs/IBM_list_NN.RDS')
-IBM_list_Kernel <- readRDS('IBM/outputs/IBM_list_Kernel.RDS')
-
+#IBM_list_NN <- readRDS('IBM/outputs/IBM_list_NN.RDS')
+#IBM_list_Kernel <- readRDS('IBM/outputs/IBM_list_Kernel.RDS')
+#IBM_list_Kernel <- readRDS('IBM/outputs/IBM_list_Kernel_ninoc.RDS')
+IBM_list_Kernel <- readRDS('IBM/outputs/IBM_list_Kernel_ninocmostcomp.RDS')
 
 
 #visualize single tray----
@@ -190,10 +201,10 @@ ggplot(df_tray, aes(time, I/N, group = trayID)) +
 #phi = 
 
 #function to calculate AUC. treats segments as trapezoids
-AUC <- function(x, y){
+AUC <- function(time, y){
   require(zoo)
-  id <- order(x)
-  AUC <- sum(diff(x[id])*rollmean(y[id],2))
+  id <- order(time)
+  AUC <- sum(diff(time[id])*rollmean(y[id],2))
   return(AUC)
 }
 
@@ -222,15 +233,14 @@ dat_listAUC <- list(
   richness = df_AUC$richness_std,
   trt = df_AUC$trt
 )
+
 mAUC <- ulam(
   alist(
     AUC ~ gamma(mu, phi),
     mu <- exp(a0[trt] + beta[trt]*richness),
-    a0[trt] ~ normal(abar, sigma),
+    a0[trt] ~ normal(.5, 1),
     beta[trt] ~ normal(0, 1),
-    phi ~ exponential(.5),
-    abar ~ normal(.5, 1),
-    sigma ~ exponential(1)
+    phi ~ exponential(.5)
     ), data=dat_listAUC, chains=1
 )
 precis(mAUC, depth = 2, prob = .95)
@@ -243,9 +253,80 @@ preds <- predictions(newdat, link(mAUC, newdat), df_AUC)
 
 ggplot(df_AUC, aes(richness, AUC)) +
   geom_jitter(height = 0, width = .1, alpha = .5) +
-  #geom_line(data = preds, aes(richness, mean), color = grey(.5)) +
-  #geom_ribbon(data = preds, aes(y = mean, ymin = lower, ymax = upper), alpha = .2) +
-  facet_grid(rows = vars(rand), cols = vars(dens))
+  geom_line(data = preds, aes(richness, mean), color = grey(.5)) +
+  geom_ribbon(data = preds, aes(y = mean, ymin = lower, ymax = upper), alpha = .2) +
+  facet_wrap(~trt)
+
+
+#run this model for each treatment seperately----
+#might want to do this if I'm borrowing trays across treatments
+gamma_stan <- stan_model('post_quarantine_trials/Stan_models/gamma_GLM.stan')
+
+#generate data lists
+ND <- expand_grid(richness_std = unique(df_AUC$richness_std))
+datlist_GLM <- function(df){
+  Xmat <- cbind(df$richness_std)
+  datlist <- list(
+    N = nrow(df),
+    K = ncol(Xmat),
+    y = df$AUC,
+    X = Xmat,
+    Nsim = nrow(ND),
+    Xsim = ND
+  )
+  return(datlist)
+}
+datlists_gamma <- lapply(split(df_AUC, df_AUC$trt), datlist_GLM)
+
+# iterate over datalists
+AUC_trt_mods <- list(NULL)
+for(i in 1:length(datlists_gamma)){
+  AUC_trt_mods[[i]] <- sampling(gamma_stan, data = datlists_gamma[[i]], chains = 1, iter = 2000)
+}
+
+#plot predictions
+pred <- list(NULL)
+for(i in 1:length(datlists_gamma)){
+  pred[[i]] <- as.data.frame(precis(AUC_trt_mods[[i]], pars = "mu_sim", depth = 2, prob = .90)) %>% 
+    select(1:4) %>% 
+    cbind(ND) %>% mutate(trt = i)
+  names(pred[[i]]) <- c('mean', 'sd', 'lower', 'upper', 'richness_std', 'trt')
+}
+pred <- bind_rows(pred)
+ggplot(pred, aes(richness_std, mean)) +
+  geom_point(data = df_AUC, aes(richness_std, AUC), alpha = .4) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = .2) +
+  facet_wrap(~trt)
+
+
+#AUC vs. Perc Infected-----
+head(df_tray)
+
+
+tmp <- df_tray %>% 
+  filter(SD == .5) %>% 
+  group_by(trayID) %>% 
+  mutate(cumAUC = cumsum(percI)) %>% 
+  ungroup() %>% 
+  mutate_at(vars(cumAUC, percI), list(std = zscore))
+
+ggplot(tmp, aes(percI, cumAUC )) +
+  geom_point(aes(color = time)) +
+  facet_wrap(~trt)+
+  scale_color_viridis_c()
+
+
+#animate differences in AUC and percI
+tmp2 <- tmp %>% 
+  pivot_longer(c(percI_std, cumAUC_std), values_to = "y", names_to = "response") %>% 
+  select(y, response, time, richness, trt)
+tmp2
+p1 <- ggplot(tmp2, aes(richness, y, color = response)) +
+  geom_point(alpha = .4, position = position_dodge(width = .4)) +
+  facet_wrap(~trt) +
+  transition_states(time, .5, .1) +
+  ggtitle('time step {closest_state}')
 
 
 
@@ -331,20 +412,22 @@ m_indrisk_complex <- ulam(
 
 
 
-#In the meantime, fit the models seperately for sp1 and sp2 specifically. (the "amlifier" and the "amplified"?) intercept and slope need to come from a MVN distribution. 
+#In the meantime, fit the models seperately for sp1 and sp2 specifically. (the "amplifier" and the "amplified"?) intercept and slope need to come from a MVN distribution. 
 #I ~ binomial(n, p)
 #p[i] = a0[trt[i]] + br[trt[i]]*richness[i];
 
 #prep the data
 df_sp1 <- df_inds2 %>% 
-  filter(spID == 'sp_1') %>% 
+  #filter(spID == 'sp_1') %>% 
+  filter(spID == 'radish') %>% 
   group_by(trayID, rand, dens, richness, trt) %>% 
   summarize(I = sum(I),
             n = n()) %>% 
   ungroup() %>% 
   mutate(richness_std = zscore(richness))
 df_sp2 <- df_inds2 %>% 
-  filter(spID == 'sp_2') %>% 
+  #filter(spID == 'sp_2') %>% 
+  filter(spID == 'arugula') %>% 
   group_by(trayID, rand, dens, richness, trt) %>% 
   summarize(I = sum(I),
             n = n()) %>% 
@@ -406,8 +489,8 @@ pred_spp <- bind_rows(
 pal <- RColorBrewer::brewer.pal(6, 'RdYlBu')
 ggplot(df_spp, aes(richness, percI, group = sp)) +
   geom_jitter(height = 0, width = .1, alpha = .5, aes( color = sp)) +
-  #geom_line(data = pred_spp, aes(richness, mean, color = sp)) +
-  #geom_ribbon(data = pred_spp, aes(y = mean, ymin = lower, ymax = upper, fill = sp), alpha = .2) +
+  geom_line(data = pred_spp, aes(richness, mean, color = sp)) +
+  geom_ribbon(data = pred_spp, aes(y = mean, ymin = lower, ymax = upper, fill = sp), alpha = .2) +
   facet_grid(rows = vars(rand), cols = vars(dens)) +
   coord_cartesian(xlim = c(1,6))+
   scale_color_manual(values = pal[1:2]) +
@@ -422,7 +505,7 @@ ggplot(df_spp, aes(richness, percI, group = sp)) +
 
 #what best explains infection risk? Can species composition alone explain it or is there something special (i.e. non-additive effects) about richness? 
 df_inds_DR <- df_inds %>% 
-  filter( state0 != "C") %>% #include extra trays (remove SD filter)
+  #filter( state0 != "C") %>% #include extra trays (remove SD filter)
   mutate(trt =  as.integer(as.factor(interaction(rand,dens))),
          sp = as.integer(as.factor(spID)), 
          trayID = as.integer(as.factor(trayID)))
@@ -434,7 +517,8 @@ df_inds_DR <- df_inds_DR %>%
 df_trays <- df_inds_DR %>% 
   group_by(trayID, rand, dens, richness) %>% 
   summarise(CC = sum(comp),
-            nsp_1 = sum(spID == 'sp_1'),
+            #nsp_1 = sum(spID == 'sp_1'),
+            nsp_1 = sum(spID == 'radish'),
             I = as.integer(sum(I)),
             n = n()) %>% 
   ungroup %>% 
@@ -461,20 +545,20 @@ dat_listtrays3 <- fdat_list_binomGLM(df_trays, covs3, newdat_trays3)
 
 
 #run model
-mod_binom <- stan_model('post_quarantine_trials/Stan_models/binomial_GLM.stan')
+mod_binom <- stan_model('post_quarantine_trials/Stan_models/betabinomial_GLM.stan')
 fit_tray1 <- sampling(mod_binom, data = dat_listtrays1, chains = 1, iter = 1000)
 fit_tray2 <- sampling(mod_binom, data = dat_listtrays2, chains = 1, iter = 1000)
 fit_tray3 <- sampling(mod_binom, data = dat_listtrays3, chains = 1, iter = 1000)
-precis(fit_tray1, pars = c("a0", "beta"), depth = 2, prob = .95)
-precis(fit_tray2, pars = c("a0", "beta"), depth = 2, prob = .95)
-precis(fit_tray3, pars = c("a0", "beta"), depth = 2, prob = .95)
+precis(fit_tray1, pars = c("a0", "beta"), depth = 2, prob = .95); colnames(covs1)
+precis(fit_tray2, pars = c("a0", "beta"), depth = 2, prob = .95); colnames(covs2)
+precis(fit_tray3, pars = c("a0", "beta"), depth = 2, prob = .95); colnames(covs3)
 
 post_tray1 <- extract.samples(fit_tray1)
 post_tray2 <- extract.samples(fit_tray2)
 post_tray3 <- extract.samples(fit_tray3)
-ppc_dens_overlay(dat_listtrays1$I, post_tray1$y_rep[1:50,])#needs work
-ppc_dens_overlay(dat_listtrays2$I, post_tray2$y_rep[1:50,]) #looks pretty decent
-ppc_dens_overlay(dat_listtrays3$I, post_tray3$y_rep[1:50,])#pretty bad
+ppc_dens_overlay(dat_listtrays1$I, post_tray1$y_rep[1:50,])#good
+ppc_dens_overlay(dat_listtrays2$I, post_tray2$y_rep[1:50,]) #good
+ppc_dens_overlay(dat_listtrays3$I, post_tray3$y_rep[1:50,])#good
 
 lootray1 <- loo(fit_tray1)
 lootray2 <- loo(fit_tray2)
@@ -489,16 +573,154 @@ ggplot(df_trays, aes(CC, percI)) +
   geom_line(data = predstrays2, aes(CC, mean, group = n, color = n)) +
   geom_ribbon(data = predstrays2, aes(y=mean, ymin = lower, ymax = upper, group = n, fill = n), alpha = .2) +
   scale_color_viridis_c() +
-  scale_fill_viridis_c() #+ facet_grid(~n)
+  scale_fill_viridis_c() #+ facet_wrap(~n)
 
 
+
+
+#Disease risk models, seperate species-------
+
+#what best explains infection risk? Can species composition alone explain it or is there something special (i.e. non-additive effects) about richness? 
+df_inds_DR <- df_inds %>% 
+  mutate(trt =  as.integer(as.factor(interaction(rand,dens))),
+         sp = as.integer(as.factor(spID)), 
+         trayID = as.integer(as.factor(trayID))) 
+#update the values of comp 
+names(comp) <- spp 
+df_inds_DR <- df_inds_DR %>% 
+  mutate(comp = recode(spID, !!!comp)) %>% 
+  group_by(trayID) %>% 
+  mutate(CC = sum(comp))
+print(df_inds_DR, width = Inf)
+
+#calculate FOI[i] (decays with distance)
+f <- function(rho, dist){
+  exp(-1/rho * dist^2)
+}
+x <- 0:20
+plot(x, f(20, x), type = 'l')#play with the range
+f_FOI <- function(data, tray, rho = 20){
+  tmp <- data %>% filter(trayID == tray)
+  dmat <- as.matrix(dist(cbind(tmp$x, tmp$y), upper = T, diag = T))
+  dmat2 <- exp(-1/rho*(dmat^2))
+  diag(dmat2) <- 0
+  FOI = colSums(dmat2*tmp$comp) 
+  return(FOI)
+}
+FOI <- sapply(unique(df_inds_DR$trayID), function(x) f_FOI(df_inds_DR, x))
+df_inds_DR$FOI <- unlist(FOI)
+ggplot(df_inds_DR, aes(CC, FOI)) +geom_point(alpha = .2)
+
+
+#calculate FOI--NN (decays with distance, but blocked by NN)
+#fix this function. need to generate adjacency matrix. dont feel like turning this into spatial object so need to figure out next move. 
+f_FOI_NN <- function(data, tray, rho = 20){
+  tmp <- data %>% filter(trayID == tray)
+  dmat <- as.matrix(dist(cbind(tmp$x, tmp$y), upper = T, diag = T))
+  dmatround <- round(dmat, 2)
+  NN_dist <- unique(sort(dmatround))[2]
+
+  dmat2 <- exp(-1/rho*(dmatround^2))
+  diag(dmat2) <- 0
+  FOI = colSums(dmat2*tmp$comp) 
+  return(FOI)
+}
+FOI <- sapply(unique(df_inds_DR$trayID), function(x) f_FOI(df_inds_DR, x))
+df_inds_DR$FOI <- unlist(FOI)
+
+
+df_trays <- df_inds_DR %>% 
+  group_by(trayID, rand, dens, richness) %>% 
+  summarise(CC = sum(comp),
+            #nsp_1 = sum(spID == 'sp_1'),
+            #I = as.integer(sum(I[spID == 'sp_1'])),
+            nsp_1 = sum(spID == 'radish'),
+            I = as.integer(sum(I[spID == 'radish'])),
+            n = n()) %>% 
+  ungroup %>% 
+  mutate(percI = I/nsp_1) %>% 
+  filter(!is.na(percI)) %>% 
+  mutate_at(c("richness", "CC", "n", 'nsp_1'), list(std = zscore) )
+head(df_trays)    
+
+ggplot(df_trays, aes(richness, percI)) +
+  geom_point(aes(color = CC))
+ggplot(df_trays, aes(richness, CC)) +
+  geom_point(aes(color = CC))
+ggplot(df_trays, aes(CC, percI)) +
+  geom_point(aes(color = CC))
+
+#prep data
+covs1 <- df_trays %>% select(richness_std, CC_std) %>% as.matrix()
+covs2 <- df_trays %>% select(richness_std, CC_std, n_std) %>% as.matrix()
+covs3 <- df_trays %>% select(richness_std, nsp_1_std)%>% as.matrix()
+newdat_trays1 <- expand_grid(richness = 0, CC = seq(-2.5, 3, length.out = 50)) %>% as.matrix()
+newdat_trays2 <- expand_grid(richness = 0, CC = seq(-2.5, 3, length.out = 50), n = unique(df_trays$n_std)) %>% as.matrix()
+newdat_trays3 <- expand_grid(richness = 0, nsp_1 = unique(df_trays$nsp_1_std)) %>% as.matrix()
+
+fdat_list_binomGLM2 <- function(observed, covs, newdat){
+  dat_list <- list(
+    N = nrow(observed),
+    K = ncol(covs),
+    X = covs,
+    I = observed$I,
+    n = observed$nsp_1,
+    Nsims = nrow(newdat),
+    Xsim = newdat
+  )
+  return(dat_list)
+}
+dat_listtrays1 <- fdat_list_binomGLM2(df_trays, covs1, newdat_trays1)
+dat_listtrays2 <- fdat_list_binomGLM2(df_trays, covs2, newdat_trays2)
+dat_listtrays3 <- fdat_list_binomGLM2(df_trays, covs3, newdat_trays3)
+
+
+#run model
+fit_tray1 <- sampling(mod_binom, data = dat_listtrays1, chains = 1, iter = 1000)
+fit_tray2 <- sampling(mod_binom, data = dat_listtrays2, chains = 1, iter = 1000)
+fit_tray3 <- sampling(mod_binom, data = dat_listtrays3, chains = 1, iter = 1000)
+precis(fit_tray1, pars = c("a0", "beta"), depth = 2, prob = .95);colnames(covs1)
+precis(fit_tray2, pars = c("a0", "beta"), depth = 2, prob = .95);colnames(covs2)
+precis(fit_tray3, pars = c("a0", "beta"), depth = 2, prob = .95);colnames(covs3)
+
+post_tray1 <- extract.samples(fit_tray1)
+post_tray2 <- extract.samples(fit_tray2)
+post_tray3 <- extract.samples(fit_tray3)
+ppc_dens_overlay(dat_listtrays1$I, post_tray1$y_rep[1:50,])#good
+ppc_dens_overlay(dat_listtrays2$I, post_tray2$y_rep[1:50,]) #good
+ppc_dens_overlay(dat_listtrays3$I, post_tray3$y_rep[1:50,])#good
+
+lootray1 <- loo(fit_tray1)
+lootray2 <- loo(fit_tray2)
+lootray3 <- loo(fit_tray3)
+loo::loo_compare(lootray1, lootray2, lootray3)
+
+
+#check out predictions against observed
+predstrays2 <- predictions2(newdat_trays1, post_tray1$psim, df_trays) 
+ggplot(df_trays, aes(CC, percI)) +
+  geom_point() +
+  geom_line(data = predstrays2, aes(CC, mean)) +
+  geom_ribbon(data = predstrays2, aes(y=mean, ymin = lower, ymax = upper), alpha = .2) +
+  scale_color_viridis_c() +
+  scale_fill_viridis_c() 
+
+
+predstrays2 <- predictions2(newdat_trays2, post_tray2$psim, df_trays) 
+ggplot(df_trays, aes(CC, percI, group = n)) +
+  geom_point(aes(color = n)) +
+  geom_line(data = predstrays2, aes(CC, mean, color = n)) +
+  geom_ribbon(data = predstrays2, aes(y=mean, ymin = lower, ymax = upper, fill = n), alpha = .2) +
+  labs(y = 'percI radish') +
+  scale_color_viridis_c() +
+  scale_fill_viridis_c() #+ facet_wrap(~n)
 
 
 
 
 #species-specific disease risk-------
 df_N <- df_inds_DR %>% 
-  filter(sp <= 3) %>% 
+  filter(sp <= 2) %>% 
   select(trayID, sp, I) 
 
 newdatbern_1 <- expand_grid(as.data.frame(newdat_trays1), sp = 1:max(df_N$sp)) 

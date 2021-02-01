@@ -94,7 +94,7 @@ add_axes <- function(spatial_object){
 design
 
 omit <- c(107:116)
-whichones <- c(1:length(spdf_list))[-omit]
+whichones <- c(1:length(spdf_list))#[-omit]
 
 
 #turn grid_list into dataframe to record data

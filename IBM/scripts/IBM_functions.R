@@ -74,7 +74,7 @@ make_grid <- function(r, tray){
 #create communities----
 
 #spatial dataframe will be more streamlined. will come from the design from your data. 
-sample_community <- function(which_spp, perc_inoc=.1, planting_dist=2){
+sample_community <- function(which_spp, perc_inoc=NULL, planting_dist=2, ninoc = NULL){
   #create size of tray and grid
   tray <- make_tray(24.13, 24.13)
   grid <- make_grid(r=planting_dist, tray) #2 cm interplanting distance
@@ -83,7 +83,10 @@ sample_community <- function(which_spp, perc_inoc=.1, planting_dist=2){
   spp <- spp[which_spp]
   
   #fill community
-  ninoc <- round(perc_inoc*length(grid))
+  if(!is.null(ninoc)){
+    ninoc <- ninoc
+  }else{ninoc <- round(perc_inoc*length(grid))}
+  
   grid_df <- SpatialPolygonsDataFrame(
     grid, data.frame(
       ID=row.names(grid),
