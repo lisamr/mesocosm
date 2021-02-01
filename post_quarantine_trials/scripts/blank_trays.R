@@ -14,14 +14,22 @@ spp <- c('radish', 'arugula','basil', 'green_rom', 'red_rom', 'butter')
 
 #design
 #6 trays for high/med competency species, 4 for low
-design <- expand.grid(species = c('arugula', 'basil', 'green_rom', 'red_rom', 'butter'), distance = 1.7, rep = 1:3) %>% 
+design <- rbind(
+  expand.grid(species = c('arugula'), rep = 1:3),
+  expand.grid(species = c('basil', 'red_rom', 'green_rom'), rep = 1:4),
+  cbind(species = 'butter', rep = 1)
+) %>% 
   arrange(species) %>% 
-  mutate(trayID = 1:nrow(.)) 
+  mutate(distance = Dist, 
+         trayID = 1:nrow(.)+200) #keeping track of these trays by making them in the 200s 
 
-design
+controls <- expand.grid(species = spp, rep = 'Control') %>% 
+  arrange(species) %>% 
+  mutate(distance = 1.5, 
+         trayID = 1:nrow(.)+ max(design$trayID) )
 
 #MAKE TRAYS----
-Ninoc <- 0
+Ninoc <- 12
 get_grid <- function(x){
   design_x <- design[x,]
   which_spp <- which(spp == design_x$species)
@@ -38,6 +46,8 @@ grid_list <- list(NULL)
 for(i in 1:nrow(design)){
   grid_list[[i]] <- get_grid(i)
 }
+
+plot_maps(grid_list[[2]])
 
 
 #manually assign which get challenged
