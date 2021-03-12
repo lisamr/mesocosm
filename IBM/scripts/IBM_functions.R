@@ -238,7 +238,7 @@ plotS_I <- function(IBM_output){
 }
 
 #now plot spatial map of the spread
-plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T, alpha_intensity=.05){
+plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T, alpha_intensity=.05, filename = NULL){
   #for plotting
   pal <- function(spp) RColorBrewer::brewer.pal(n = length(spp), name = "RdYlBu")
   
@@ -283,7 +283,12 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T, alpha_intensit
       geom_point(data=tmp_centroids, aes(x, y), shape = ifelse(is.na(tmp_centroids$state), 4, 16),size = 3, alpha = ifelse(tmp_centroids$state %in% c("I", NA), .9, 0)) +
       transition_states(time, .5, 1) +
       ggtitle('time step {closest_state} of {tfinal}')
-    plot <- animate(plot, nframes=tfinal, fps=5, duration=10)
+    if(is.null(filename)){
+      plot <- animate(plot, nframes=tfinal, fps=5, duration=10)
+    }else{
+      plot <- animate(plot, nframes=tfinal, fps=5, duration=10, renderer = gifski_renderer(filename))
+    }
+    
     
   }else{#plot static plot
     plot <- staticplot + 
@@ -292,6 +297,7 @@ plot_spread_map <- function(spatialgrid_df, IBMoutput, animate=T, alpha_intensit
   
   return(plot)
 }
+
 
 #plotting functions after simulation----
 #for plotting spdf_list objects

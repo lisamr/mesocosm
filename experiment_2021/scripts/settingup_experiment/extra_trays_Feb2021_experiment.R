@@ -1,18 +1,17 @@
 #extra trays to be planted for the experiment in Feb 2021
 
 
-#rm(list=ls())
 source('IBM/scripts/IBM_functions.R')
 library(tidyverse)
 theme_set(theme_classic())
 
 
-#DESIGN PARAMETERS----
+#DESIGN PARAMETERS--------------------------------
 #distances wanted
 Dist <- c(1.7)
 
 #spp used (high, med, low competency species)
-spp <- c('radish', 'arugula','basil', 'green_rom', 'red_rom', 'butter')
+spp <- c('radish', 'arugula','basil', 'red_rom', 'green_rom', 'butter')
 
 #design
 #6 trays for high/med competency species, 4 for low
@@ -28,12 +27,12 @@ design <- rbind(
 control <- expand.grid(species = spp, rep = 'Control') %>% 
   arrange(species) %>% 
   mutate(distance = 1.5, 
-         trayID = 1:nrow(.)+ max(design$trayID)) 
+         trayID = 1:nrow(.)+ 300) #controls are in the 300s
 
-#MAKE TRAYS----
+#MAKE TRAYS---------------------------------------
 Ninoc <- 12
-get_grid <- function(x, Ninoc){
-  design_x <- design[x,]
+get_grid <- function(df, x, Ninoc){
+  design_x <- df[x,]
   which_spp <- which(spp == design_x$species)
   grid <- with(design_x, sample_community(which_spp, planting_dist = distance, ninoc = Ninoc))
   grid$trayID <- design_x$trayID
@@ -47,16 +46,17 @@ set.seed(2020)
 #normal dimensions
 extras <- list(NULL)
 for(i in 1:nrow(design)){
-  extras[[i]] <- get_grid(i, Ninoc)
+  extras[[i]] <- get_grid(design, i, Ninoc)
 }
 
 controls <- list(NULL)
 for(i in 1:nrow(control)){
-  controls[[i]] <- get_grid(i, 0)
+  controls[[i]] <- get_grid(control, i, 0)
 }
 
 #extra trays compiled together
 extra_trays <- c(extras, controls)
+
 
 
 

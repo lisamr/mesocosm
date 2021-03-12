@@ -77,6 +77,7 @@ spdf_list4 <- c(spdf_list3, extra_trays)
 #spatial dataframe
 saveRDS(spdf_list4, 'post_quarantine_trials/output/big_experiment_spdf_list_02082021.RDS')
 
+#spdf_list4 = readRDS('post_quarantine_trials/output/big_experiment_spdf_list_02082021.RDS')
 
 #data of the maps
 tmp <- lapply(spdf_list4, function(x) x@data)
@@ -85,11 +86,19 @@ tmp <- lapply(spdf_list4, function(x) x@data)
 mapdf <- data.table::rbindlist(tmp, fill = TRUE) %>% 
   arrange(trayID)
 head(mapdf); tail(mapdf)
+
+#add coordinates...just take from another spreadsheet
+zz = read_csv('GH_output/real_experiment/big_experiment_03302020_datasheet.csv')
+mapdf = mapdf %>% left_join(select(zz, trayID, ID, horiz, vert))
 write_csv(mapdf, 'post_quarantine_trials/output/big_experiment_design_02082021.csv')
 
 
 #Maps for binder
 spdf_list4 <- readRDS('post_quarantine_trials/output/big_experiment_spdf_list_02082021.RDS') 
+
+#check the trayIDs
+length(spdf_list4)
+sapply(spdf_list4, function(x) x$trayID[1]) %>% sort
 
 maps_all <- lapply(1:length(spdf_list4), function(x) plot_maps(spdf_list4[[x]], point_shape = 16, point_cex = 2.5))
 pdf('post_quarantine_trials/figures/maps_all_for_binder02082021.pdf')
